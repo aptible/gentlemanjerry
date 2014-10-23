@@ -1,6 +1,6 @@
 DOCKER = docker
 ENV = $(shell cat .dockeropts)
-REPO = quay.io/aptible/joecool
+REPO = quay.io/aptible/gentlemanjerry
 
 TAG = $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null)
 ifeq ($(TAG), master)

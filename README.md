@@ -18,18 +18,15 @@ $ mkdir /tmp/jerry-cert
 $ openssl req -x509 -batch -nodes -days 3650 -newkey rsa:2048 -keyout /tmp/jerry-cert/jerry.key -out /tmp/jerry-cert/jerry.crt
 ```
 
-Next, build the image:
-```
-$ make build
-...
-Successfully built 0d337fcfb26f
-```
+Next, pull the image from quay (`docker pull quay.io/aptible/gentlemanjerry`) or build it locally
+(`make build`). The image name will be `quay.io/aptible/gentlemanjerry:latest` if you pull or build
+from the `master` branch.
 
 Finally, start a container running that image that mounts in the certificate and key and runs on a 
 port of your choice, say, 1234:
 
 ````
-$ docker run -i -t -p 1234:5000 -v /tmp/jerry-cert:/tmp/certs 0d337fcfb26f
+$ docker run -i -t -p 1234:5000 -v /tmp/jerry-cert:/tmp/certs quay.io/aptible/gentlemanjerry:latest
 ```
 
 Logstash is written in JRuby; it may take several seconds to start up. You should see some output 
