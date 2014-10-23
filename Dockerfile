@@ -20,4 +20,8 @@ ADD bin/run-gentleman-jerry.sh run-gentleman-jerry.sh
 ADD test /tmp/test
 RUN bats /tmp/test
 
+# A volume containing a certificate pair named jerry.key/jerry.crt must be mounted into 
+# this directory on the container.
+VOLUME ["/tmp/certs"]
+
 CMD ["/bin/bash", "run-gentleman-jerry.sh"]
