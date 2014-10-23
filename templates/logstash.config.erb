@@ -1,0 +1,22 @@
+input {
+  lumberjack {
+    codec => json
+    port => 5000
+    type => "json"
+    ssl_certificate => "/tmp/certs/jerry.crt"
+    ssl_key => "/tmp/certs/jerry.key"
+  }
+}
+filter {
+  date {
+    match => [ "time", "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'Z'" ]
+  }
+}
+filter {
+  grok {
+    match => [ "file", "/tmp/dockerlogs/%{BASE16NUM:container}" ]
+  }
+}
+output {
+<%= ENV['LOGSTASH_OUTPUT_CONFIG'] || "stdout { codec => rubydebug }" %>
+}
