@@ -16,11 +16,16 @@ RUN /logstash-1.4.2/bin/plugin install contrib
 ADD templates/logstash.config.erb /logstash.config.erb
 ADD bin/run-gentleman-jerry.sh run-gentleman-jerry.sh
 
+# Override to run a syslog output on TLS over TCP, currently not available in logstash.
+# https://github.com/elasticsearch/logstash-contrib/pull/127 may add this to logstash-contrib.
+# Until then, we'll just add the file directly to our installation.
+ADD syslog.rb /logstash-1.4.2/lib/logstash/outputs/syslog.rb
+
 # Run tests
 ADD test /tmp/test
 RUN bats /tmp/test
 
-# A volume containing a certificate pair named jerry.key/jerry.crt must be mounted into 
+# A volume containing a certificate pair named jerry.key/jerry.crt must be mounted into
 # this directory on the container.
 VOLUME ["/tmp/certs"]
 
