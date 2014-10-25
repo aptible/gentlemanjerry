@@ -23,10 +23,10 @@ teardown() {
 }
 
 @test "Gentleman Jerry should start up with a default configuration" {
-  openssl req -x509 -batch -nodes -newkey rsa:2048 -keyout /tmp/certs/jerry.key -out /tmp/certs/jerry.crt 
+  openssl req -x509 -batch -nodes -newkey rsa:2048 -keyout /tmp/certs/jerry.key -out /tmp/certs/jerry.crt
   # Unfortunately, it takes a couple of seconds for logstash to start up. This
   # timeout might need to be increased on slower machines.
-  run timeout 15s /bin/bash run-gentleman-jerry.sh
+  run timeout 20s /bin/bash run-gentleman-jerry.sh
   [ "$status" -eq 124 ]
   [[ "$output" =~ "Using milestone 1 input plugin 'lumberjack'" ]]
 }
@@ -36,7 +36,7 @@ teardown() {
   export LOGSTASH_OUTPUT_CONFIG="syslog { facility => \"daemon\" host => \"127.0.0.1\" port => 514 severity => \"emergency\" }"
   # Unfortunately, it takes a couple of seconds for logstash to start up. This
   # timeout might need to be increased on slower machines.
-  run timeout 15s /bin/bash run-gentleman-jerry.sh
+  run timeout 20s /bin/bash run-gentleman-jerry.sh
   [ "$status" -eq 124 ]
   [[ "$output" =~ "Using milestone 1 input plugin 'lumberjack'" ]]
   [[ "$output" =~ "Using milestone 1 output plugin 'syslog'" ]]
