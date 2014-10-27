@@ -17,6 +17,7 @@ filter {
     match => [ "file", "/tmp/dockerlogs/%{BASE16NUM:container}" ]
   }
 }
+<%= ENV['LOGSTASH_FILTERS'] || "" %>
 output {
 <%= ENV['LOGSTASH_OUTPUT_CONFIG'] || "stdout { codec => rubydebug }" %>
 }
