@@ -109,6 +109,7 @@ class LogStash::Outputs::Syslog < LogStash::Outputs::Base
             cert_store.set_default_paths
             ssl.cert_store = cert_store
             @client_socket = OpenSSL::SSL::SSLSocket.new(@client_socket, ssl)
+            @client_socket.sync_close
         end
         @client_socket.connect
     end
