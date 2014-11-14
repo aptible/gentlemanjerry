@@ -51,6 +51,8 @@ class LogStash::Outputs::Syslog < LogStash::Outputs::Base
     "debug",
   ]
 
+  MAX_RETRIES = 3
+
   # syslog server address to connect to
   config :host, :validate => :string, :required => true
 
@@ -87,7 +89,8 @@ class LogStash::Outputs::Syslog < LogStash::Outputs::Base
 
   public
   def register
-      @client_socket = nil
+    @client_socket = nil
+    @last_message_sent = 0
   end
 
   private
@@ -97,6 +100,7 @@ class LogStash::Outputs::Syslog < LogStash::Outputs::Base
 
   private
   def connect
+    @client_socket.close rescue nil if @client_socket
     if @protocol == 'udp'
         @client_socket = UDPSocket.new
         @client_socket.connect(@host, @port)
@@ -109,8 +113,9 @@ class LogStash::Outputs::Syslog < LogStash::Outputs::Base
             cert_store.set_default_paths
             ssl.cert_store = cert_store
             @client_socket = OpenSSL::SSL::SSLSocket.new(@client_socket, ssl)
-            @client_socket.sync_close
+            @client_socket.sync_close = true
         end
+        @client_socket.setsockopt(Socket::SOL_SOCKET, Socket::SO_KEEPALIVE, 1)      
         @client_socket.connect
     end
   end
@@ -138,14 +143,20 @@ class LogStash::Outputs::Syslog < LogStash::Outputs::Base
       syslog_msg = "<"+priority.to_s()+">1 "+timestamp+" "+sourcehost+" "+appname+" "+procid+" "+msgid+" - "+event["message"]
     end
 
-    begin
-      connect unless @client_socket
-      @client_socket.write(syslog_msg + "\n")
-    rescue => e
-      @logger.warn(@protocol+" output exception", :host => @host, :port => @port,
-                 :exception => e, :backtrace => e.backtrace)
-      @client_socket.close rescue nil
-      @client_socket = nil
+    MAX_RETRIES.times do |attempt|
+      begin
+        now = Time.now
+        connect unless @client_socket && (now - @last_message_sent) < 30
+        @client_socket.write(syslog_msg + "\n")
+        @last_message_sent = now
+        return
+      rescue => e
+        @logger.warn(@protocol+" output exception on attempt #{attempt}",
+                     :host => @host, :port => @port,
+                     :exception => e, :backtrace => e.backtrace)
+        @client_socket.close rescue nil
+        @client_socket = nil
+      end
     end
   end
 end
