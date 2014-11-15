@@ -57,3 +57,23 @@ teardown() {
   [[ "$output" =~ "Using milestone 1 input plugin 'lumberjack'" ]]
   [[ "$output" =~ "Using milestone 1 output plugin 'syslog'" ]]
 }
+
+# We send syslog over TLS to various log drains-as-a-service and need to be able to
+# verify their certificate chains with the system certificates we have in
+# /usr/lib/ssl/cert.pem. This file is passed to logstash in the SSL_CERT_FILE environment
+# variable, which Ruby reads. These next few tests verify that this cert file works.
+
+@test "Gentleman Jerry can verify logs.papertrailapp.com:514's certificate" {
+  run timeout 3 openssl s_client -CAfile /usr/lib/ssl/cert.pem -connect logs.papertrailapp.com:514
+  [[ "$output" =~ "Verify return code: 0 (ok)" ]]
+}
+
+@test "Gentleman Jerry can verify logs2.papertrailapp.com:514's certificate" {
+  run timeout 3 openssl s_client -CAfile /usr/lib/ssl/cert.pem -connect logs.papertrailapp.com:514
+  [[ "$output" =~ "Verify return code: 0 (ok)" ]]
+}
+
+@test "Gentleman Jerry can verify api.logentries.com:25414's certificate" {
+  run timeout 3 openssl s_client -CAfile /usr/lib/ssl/cert.pem -connect api.logentries.com:25414
+  [[ "$output" =~ "Verify return code: 0 (ok)" ]]
+}
