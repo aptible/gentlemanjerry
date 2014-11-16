@@ -51,8 +51,6 @@ class LogStash::Outputs::Syslog < LogStash::Outputs::Base
     "debug",
   ]
 
-  MAX_RETRIES = 3
-
   # syslog server address to connect to
   config :host, :validate => :string, :required => true
 
@@ -91,6 +89,8 @@ class LogStash::Outputs::Syslog < LogStash::Outputs::Base
   def register
     @client_socket = nil
     @last_message_sent = 0
+    @num_retries = Integer ENV['SYSLOG_MAX_RETRIES'] rescue nil || 3
+    @timeout = Integer ENV['SYSLOG_CONNECTION_TIMEOUT_SECONDS'] rescue nil || 30
   end
 
   private
@@ -115,7 +115,6 @@ class LogStash::Outputs::Syslog < LogStash::Outputs::Base
             @client_socket = OpenSSL::SSL::SSLSocket.new(@client_socket, ssl)
             @client_socket.sync_close = true
         end
-        @client_socket.setsockopt(Socket::SOL_SOCKET, Socket::SO_KEEPALIVE, 1)      
         @client_socket.connect
     end
   end
@@ -143,10 +142,10 @@ class LogStash::Outputs::Syslog < LogStash::Outputs::Base
       syslog_msg = "<"+priority.to_s()+">1 "+timestamp+" "+sourcehost+" "+appname+" "+procid+" "+msgid+" - "+event["message"]
     end
 
-    MAX_RETRIES.times do |attempt|
+    @num_retries.times do |attempt|
       begin
         now = Time.now
-        connect unless @client_socket && (now - @last_message_sent) < 30
+        connect unless @client_socket && (now - @last_message_sent) < @timeout
         @client_socket.write(syslog_msg + "\n")
         @last_message_sent = now
         return
