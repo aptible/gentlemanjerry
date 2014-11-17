@@ -89,8 +89,8 @@ class LogStash::Outputs::Syslog < LogStash::Outputs::Base
   def register
     @client_socket = nil
     @last_message_sent = 0
-    @num_retries = Integer ENV['SYSLOG_MAX_RETRIES'] rescue nil || 3
-    @timeout = Integer ENV['SYSLOG_CONNECTION_TIMEOUT_SECONDS'] rescue nil || 30
+    @num_retries = (Integer ENV['SYSLOG_MAX_RETRIES'] rescue nil) || 3
+    @timeout = (Integer ENV['SYSLOG_CONNECTION_TIMEOUT_SECONDS'] rescue nil) || 30
   end
 
   private
