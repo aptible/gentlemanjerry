@@ -10,9 +10,9 @@ RUN apt-get update && \
     apt-get install -y curl oracle-java7-installer ruby && \
     apt-get clean
 
-# Download a snapshot of Mozilla's root certificates file, add it to the system certificates
-# at /etc/ssl/certs. We need this to validate the certificate chains of various off-brand
-# certs used by papertrail, logentries, etc.
+# Download a snapshot of Mozilla's root certificates file and save it to
+# /usr/lib/ssl/cert.pem. We need this to validate the certificate chains of
+# various off-brand certs used by papertrail, logentries, etc.
 RUN curl -O https://papertrailapp.com/tools/papertrail-bundle.pem && \
     echo "ab6a49f7788235bab954500c46e0c4a9c451797c papertrail-bundle.pem" | sha1sum -c - && \
     mv papertrail-bundle.pem /usr/lib/ssl/cert.pem
