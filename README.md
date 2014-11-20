@@ -48,6 +48,8 @@ Runtime behavior of Joe Cool can be modified by passing the following environmen
 * `LOGSTASH_FILTERS`: Any additional logstash filter definitions. Example: to rename the `log`
   field to `message`, set this variable to "filter { mutate { rename => ['log', 'message'] } }".
   Default: empty string.
+* `LOGSTASH_MAX_HEAP_SIZE`: Optional. Restricts the JVM max heap size for the logstash agent.
+  Default is "64M".
 
 ## Tests
 
