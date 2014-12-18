@@ -24,4 +24,9 @@ export SSL_CERT_FILE=/usr/lib/ssl/cert.pem
 # instances we may have many accounts on the same machine.
 export LS_HEAP_SIZE=${LOGSTASH_MAX_HEAP_SIZE:-64M}
 
-cd logstash-1.4.2 && bin/logstash -f logstash.config
+cd logstash-1.4.2
+while true; do
+    bin/logstash -f logstash.config
+    sleep 1
+    echo "GentlemanJerry died, restarting..."
+done

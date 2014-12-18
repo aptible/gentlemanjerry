@@ -35,6 +35,7 @@ teardown() {
 
   /bin/bash run-gentleman-jerry.sh > /tmp/logs/jerry.logs &
   run timeout 120 sh -c 'tail --pid=$$ -f /tmp/logs/jerry.logs | { sed "1 q" && kill $$ ;}'
+  pkill -f run-gentleman-jerry
   pkill -f 'java.*logstash'
   [ "$status" -eq 143 ]  # Command should have been terminated. We'd get 124 if it timed out.
   [[ "$output" =~ "Using milestone 1 input plugin 'lumberjack'" ]]
@@ -52,10 +53,39 @@ teardown() {
 
   /bin/bash run-gentleman-jerry.sh > /tmp/logs/jerry.logs &
   run timeout 120 sh -c 'tail --pid=$$ -f /tmp/logs/jerry.logs | { sed "2 q" && kill $$ ;}'
+  pkill -f run-gentleman-jerry
   pkill -f 'java.*logstash'
   [ "$status" -eq 143 ]  # Command should have been terminated. We'd get 124 if it timed out.
   [[ "$output" =~ "Using milestone 1 input plugin 'lumberjack'" ]]
   [[ "$output" =~ "Using milestone 1 output plugin 'syslog'" ]]
+}
+
+@test "Gentleman Jerry should restart if it dies" {
+  openssl req -x509 -batch -nodes -newkey rsa:2048 -keyout /tmp/certs/jerry.key -out /tmp/certs/jerry.crt
+  export LOGSTASH_OUTPUT_CONFIG="syslog { facility => \"daemon\" host => \"127.0.0.1\" port => 514 severity => \"emergency\" }"
+
+  # Unfortunately, it takes a while for logstash to start up. The tests below
+  # run the gentlemanjerry startup script in the background, then tail its
+  # output until we see two lines of output or 120 seconds have elapsed. At that
+  # point, if we haven't timed out, GentlemanJerry has started. We then kill
+  # the logstash process and wait for GentlemanJerry to restart, which should
+  # create 5 lines in the log (2 for the first startup, 1 to report the restart,
+  # then 2 more for the final startup).
+
+  /bin/bash run-gentleman-jerry.sh > /tmp/logs/jerry.logs &
+  export JERRYPID=$$
+  timeout 120 sh -c 'tail --pid=$JERRYPID -f /tmp/logs/jerry.logs | { sed "2 q" && kill $$ ;}' || [ $? == 143 ]
+  pkill -f 'java.*logstash'
+  timeout 120 sh -c 'tail --pid=$JERRYPID -f /tmp/logs/jerry.logs | { sed "5 q" && kill $$ ;}' || [ $? == 143 ]
+  pkill -f run-gentleman-jerry
+  pkill -f 'java.*logstash'
+  run cat /tmp/logs/jerry.logs
+
+  [[ "${lines[0]}" =~ "Using milestone 1 input plugin 'lumberjack'" ]]
+  [[ "${lines[1]}" =~ "Using milestone 1 output plugin 'syslog'" ]]
+  [ "${lines[2]}" = "GentlemanJerry died, restarting..." ]
+  [[ "${lines[3]}" =~ "Using milestone 1 input plugin 'lumberjack'" ]]
+  [[ "${lines[4]}" =~ "Using milestone 1 output plugin 'syslog'" ]]
 }
 
 # We send syslog over TLS to various log drains-as-a-service and need to be able to
