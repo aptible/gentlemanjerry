@@ -34,11 +34,10 @@ teardown() {
   # output against what we expect.
 
   /bin/bash run-gentleman-jerry.sh > /tmp/logs/jerry.logs &
-  run timeout 120 sh -c 'tail --pid=$$ -f /tmp/logs/jerry.logs | { sed "1 q" && kill $$ ;}'
+  run timeout -t 120 grep -q "Logstash startup completed" <(tail -f /tmp/logs/jerry.logs)
   pkill -f run-gentleman-jerry
   pkill -f 'java.*logstash'
-  [ "$status" -eq 143 ]  # Command should have been terminated. We'd get 124 if it timed out.
-  [[ "$output" =~ "Using milestone 1 input plugin 'lumberjack'" ]]
+  [ "$status" -eq 0 ]  # Command should have finished before timeout. We'd get 143 if it timed out.
 }
 
 @test "Gentleman Jerry should start up with a syslog output configuration" {
@@ -52,12 +51,10 @@ teardown() {
   # against what we expect.
 
   /bin/bash run-gentleman-jerry.sh > /tmp/logs/jerry.logs &
-  run timeout 120 sh -c 'tail --pid=$$ -f /tmp/logs/jerry.logs | { sed "2 q" && kill $$ ;}'
+  run timeout -t 120 grep -q "Logstash startup completed" <(tail -f /tmp/logs/jerry.logs)
   pkill -f run-gentleman-jerry
   pkill -f 'java.*logstash'
-  [ "$status" -eq 143 ]  # Command should have been terminated. We'd get 124 if it timed out.
-  [[ "$output" =~ "Using milestone 1 input plugin 'lumberjack'" ]]
-  [[ "$output" =~ "Using milestone 1 output plugin 'syslog'" ]]
+  [ "$status" -eq 0 ]  # Command should have finished before timeout. We'd get 143 if it timed out.
 }
 
 @test "Gentleman Jerry should restart if it dies" {
@@ -73,19 +70,16 @@ teardown() {
   # then 2 more for the final startup).
 
   /bin/bash run-gentleman-jerry.sh > /tmp/logs/jerry.logs &
-  export JERRYPID=$$
-  timeout 120 sh -c 'tail --pid=$JERRYPID -f /tmp/logs/jerry.logs | { sed "2 q" && kill $$ ;}' || [ $? == 143 ]
+  timeout -t 120 grep -q "Logstash startup completed" <(tail -f /tmp/logs/jerry.logs)
+  pkill -f 'tail'
   pkill -f 'java.*logstash'
-  timeout 120 sh -c 'tail --pid=$JERRYPID -f /tmp/logs/jerry.logs | { sed "5 q" && kill $$ ;}' || [ $? == 143 ]
+  run timeout -t 120 grep -q "GentlemanJerry died, restarting..." <(tail -f /tmp/logs/jerry.logs)
+  pkill -f 'tail'
+  run timeout -t 120 grep -q "Logstash startup completed" <(tail -f /tmp/logs/jerry.logs)
+  pkill -f 'tail'
   pkill -f run-gentleman-jerry
   pkill -f 'java.*logstash'
-  run cat /tmp/logs/jerry.logs
-
-  [[ "${lines[0]}" =~ "Using milestone 1 input plugin 'lumberjack'" ]]
-  [[ "${lines[1]}" =~ "Using milestone 1 output plugin 'syslog'" ]]
-  [ "${lines[2]}" = "GentlemanJerry died, restarting..." ]
-  [[ "${lines[3]}" =~ "Using milestone 1 input plugin 'lumberjack'" ]]
-  [[ "${lines[4]}" =~ "Using milestone 1 output plugin 'syslog'" ]]
+  [ "$status" -eq 0 ]  # Command should have finished before timeout. We'd get 143 if it timed out.
 }
 
 # We send syslog over TLS to various log drains-as-a-service and need to be able to
@@ -94,16 +88,11 @@ teardown() {
 # variable, which Ruby reads. These next few tests verify that this cert file works.
 
 @test "Gentleman Jerry can verify logs.papertrailapp.com:514's certificate" {
-  run timeout 3 openssl s_client -CAfile /usr/lib/ssl/cert.pem -connect logs.papertrailapp.com:514
-  [[ "$output" =~ "Verify return code: 0 (ok)" ]]
-}
-
-@test "Gentleman Jerry can verify logs2.papertrailapp.com:514's certificate" {
-  run timeout 3 openssl s_client -CAfile /usr/lib/ssl/cert.pem -connect logs.papertrailapp.com:514
+  run timeout -t 3 openssl s_client -CAfile papertrail-bundle.pem -connect logs.papertrailapp.com:514
   [[ "$output" =~ "Verify return code: 0 (ok)" ]]
 }
 
 @test "Gentleman Jerry can verify api.logentries.com:25414's certificate" {
-  run timeout 3 openssl s_client -CAfile /usr/lib/ssl/cert.pem -connect api.logentries.com:25414
+  run timeout -t 3 openssl s_client -CAfile papertrail-bundle.pem -connect api.logentries.com:25414
   [[ "$output" =~ "Verify return code: 0 (ok)" ]]
 }

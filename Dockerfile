@@ -1,37 +1,40 @@
-FROM quay.io/aptible/ubuntu:14.04
+FROM quay.io/aptible/alpine
 
-# Install curl, oracle-java7 and ruby.
-RUN apt-get update && \
-    apt-get install -y python-software-properties software-properties-common
-RUN add-apt-repository ppa:webupd8team/java
-RUN echo debconf shared/accepted-oracle-license-v1-1 select true | debconf-set-selections
-RUN echo debconf shared/accepted-oracle-license-v1-1 seen true | debconf-set-selections
-RUN apt-get update && \
-    apt-get install -y curl oracle-java7-installer ruby && \
-    apt-get clean
+RUN apk update && apk-install curl openjdk7-jre-base ruby
 
 # Download a snapshot of Mozilla's root certificates file and save it to
 # /usr/lib/ssl/cert.pem. We need this to validate the certificate chains of
 # various off-brand certs used by papertrail, logentries, etc.
 RUN curl -O https://papertrailapp.com/tools/papertrail-bundle.pem && \
-    echo "ab6a49f7788235bab954500c46e0c4a9c451797c papertrail-bundle.pem" | sha1sum -c - && \
-    mv papertrail-bundle.pem /usr/lib/ssl/cert.pem
+    echo "ab6a49f7788235bab954500c46e0c4a9c451797c  papertrail-bundle.pem" | sha1sum -c -
 
-# Download the logstash tarball, verify it's SHA against a golden SHA, extract it.
-RUN curl -O https://download.elasticsearch.org/logstash/logstash/logstash-1.4.2.tar.gz && \
-    echo "d59ef579c7614c5df9bd69cfdce20ed371f728ff logstash-1.4.2.tar.gz" | sha1sum -c - && \
-    tar zxf logstash-1.4.2.tar.gz
+# The OpenJDK package comes with an empty cacerts file, so we need to generate
+# one from the certificate bundle above so that logstash plugin installation will
+# work and TLS-TCP syslog will work without setting an SSL_CERT_FILE environment
+# variable. Adding everything from papertrail-bundle.pem to the cacerts file
+# involves splitting the bundle into its constituent certificates and importing
+# them one-by-one into the generated cacerts file.
+RUN mkdir -p /tmp/split-certs && \
+    cat papertrail-bundle.pem | \
+      awk 'split_after==1{n++;split_after=0} /-----END CERTIFICATE-----/ {split_after=1} {print > "/tmp/split-certs/cert" n ".pem"}' && \
+    find /tmp/split-certs/* -exec keytool -import -trustcacerts -storepass changeit -noprompt -file {} -alias {} \
+      -keystore /usr/lib/jvm/java-1.7-openjdk/jre/lib/security/cacerts \; && \
+    keytool -list -keystore /usr/lib/jvm/java-1.7-openjdk/jre/lib/security/cacerts --storepass changeit
 
-# Install the logstash contrib modules (need these for syslog outputs, for example.)
-RUN /logstash-1.4.2/bin/plugin install contrib
+# Download the logstash tarball, verify its SHA against a golden SHA, extract it.
+RUN curl -O https://download.elastic.co/logstash/logstash/logstash-1.5.0.tar.gz && \
+    echo "9729c2d31fddaabdd3d8e94c34a6d1f61d57f94a  logstash-1.5.0.tar.gz" | sha1sum -c - && \
+    tar zxf logstash-1.5.0.tar.gz
+
+# Install our syslog output implementation
+RUN apk-install git && \
+    echo "gem 'logstash-output-syslog', :git => 'https://github.com/aaw/logstash-output-syslog'," \
+         ":branch => 'aptible'" >> /logstash-1.5.0/Gemfile && \
+    /logstash-1.5.0/bin/plugin install --no-verify && \
+    apk del git
 
 ADD templates/logstash.config.erb /logstash.config.erb
 ADD bin/run-gentleman-jerry.sh run-gentleman-jerry.sh
-
-# Override to run a syslog output on TLS over TCP, currently not available in logstash.
-# https://github.com/elasticsearch/logstash-contrib/pull/127 may add this to logstash-contrib.
-# Until then, we'll just add the file directly to our installation.
-ADD syslog.rb /logstash-1.4.2/lib/logstash/outputs/syslog.rb
 
 # Run tests
 ADD test /tmp/test
