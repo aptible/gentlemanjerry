@@ -17,6 +17,12 @@ erb logstash.config.erb > logstash-${LOGSTASH_VERSION}/logstash.config && \
 # instances we may have many accounts on the same machine.
 export LS_HEAP_SIZE=${LOGSTASH_MAX_HEAP_SIZE:-64M}
 
+# The current logstash-output-elasticsearch plugin floods the console logs with
+# INFO-level logs from org.apache.http.* about HTTP retries. These log messages
+# don't seem to indicate an actual error, so we're suppressing them here with a
+# custom log4j.properties configuration.
+export LS_JAVA_OPTS="-Dlog4j.configuration=file:/log4j.properties"
+
 cd logstash-${LOGSTASH_VERSION}
 while true; do
     bin/logstash -f logstash.config
