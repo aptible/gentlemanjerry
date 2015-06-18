@@ -10,15 +10,37 @@ Gentleman Jerry is implemented as a [logstash](http://logstash.net) instance.
 
 ## Example
 
-To run your own Gentleman Jerry, first create a self-signed certificate pair named
-jerry.key/jerry.crt:
+To run your own Gentleman Jerry, first create a key and self-signed certificate named
+jerry.key/jerry.crt. Logstash and logstash-forwarder require either the certificate common
+name to match the domain used to address GentlemanJerry or that the server IP is
+specified as the Subject Alternative Name in the certificate. In the instructions that
+follow, we'll assume the latter and describe the process for IP-based addressing.
+
+First, make a `/tmp/jerry-cert` directory and create a config file named `/tmp/jerry-cert/jerry.config`
+with the following contents (substituting the actual server IP for `$IP_ADDRESS` or using
+the address of the `docker0` interface `$IP_ADDRESS` if you're going to run everything locally).
 
 ```
-$ mkdir /tmp/jerry-cert
-$ openssl req -x509 -batch -nodes -days 3650 -newkey rsa:2048 -keyout /tmp/jerry-cert/jerry.key -out /tmp/jerry-cert/jerry.crt
+[req]
+distinguished_name = req_distinguished_name
+x509_extensions = v3_req
+prompt = no
+[req_distinguished_name]
+CN = $IP_ADDRESS
+[v3_req]
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid,issuer
+basicConstraints = CA:TRUE
+subjectAltName = IP:$IP_ADDRESS
 ```
 
-Next, pull the image from quay (`docker pull quay.io/aptible/gentlemanjerry`) or build it locally
+Next, use that config file to generate the key and self-signed certificate:
+
+```
+$ openssl req -x509 -batch -nodes -days 3650 -newkey rsa:2048 -config /tmp/jerry-cert/jerry.config -keyout /tmp/jerry-cert/jerry.key -out /tmp/jerry-cert/jerry.crt
+```
+
+Pull the image from quay (`docker pull quay.io/aptible/gentlemanjerry`) or build it locally
 (`make build`). The image name will be `quay.io/aptible/gentlemanjerry:latest` if you pull or build
 from the `master` branch.
 
@@ -29,22 +51,23 @@ port of your choice, say, 1234:
 $ docker run -i -t -p 1234:5000 -v /tmp/jerry-cert:/tmp/certs quay.io/aptible/gentlemanjerry:latest
 ```
 
-Logstash is written in JRuby; it may take several seconds to start up. You should see some output
-when it's ready.
+Logstash is written in JRuby; it may take several seconds to start up. You should see the message
+"Logstash startup completed" when it's up and running.
 
 Now you're ready to [spawn a Joe Cool](https://github.com/aptible/joecool#Example) and send logs
 to your instance.
 
 ## Environment variables
 
-Runtime behavior of Joe Cool can be modified by passing the following environment variables to
+Runtime behavior of Gentleman Jerry can be modified by passing the following environment variables to
 `docker run`:
 
 * `LOGSTASH_OUTPUT_CONFIG`: A logstash output configuration. A
-  [full list of supported outputs](http://logstash.net/docs/1.4.2) includes syslog, elasticsearch,
-  files, and more. Gentleman Jerry includes the logstash contribs plugins package, so all outputs
-  should work out of the box. Default: `stdout { codec => rubydebug }`, which prints log messages
-  to stdout.
+  [full list of supported outputs](https://www.elastic.co/guide/en/logstash/current/output-plugins.html)
+  includes syslog, elasticsearch, files, and more. Gentleman Jerry includes the syslog output as
+  well as many other common outputs that ship with Logstash. See `/logstash-1.5.0/Gemfile` in the
+  Gentleman Jerry image to see a full list of available outputs. Default: `stdout { codec => rubydebug }`,
+  which prints log messages to stdout.
 * `LOGSTASH_FILTERS`: Any additional logstash filter definitions. Example: to rename the `log`
   field to `message`, set this variable to "filter { mutate { rename => ['log', 'message'] } }".
   Default: empty string.

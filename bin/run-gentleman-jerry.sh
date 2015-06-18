@@ -1,4 +1,5 @@
 #!/bin/bash
+LOGSTASH_VERSION="1.5.1"
 if [ ! -f /tmp/certs/jerry.crt ]; then
   echo "Expected certificate in /tmp/certs/jerry.crt."
   exit 1
@@ -7,15 +8,7 @@ if [ ! -f /tmp/certs/jerry.key ]; then
   echo "Expected key in /tmp/certs/jerry.key."
   exit 1
 fi
-if [ ! -f /usr/lib/ssl/cert.pem ]; then
-  echo "Expected root CA certificates in /usr/lib/ssl/cert.pem."
-  exit 1
-fi
-erb logstash.config.erb > logstash-1.4.2/logstash.config && \
-
-# SSL_CERT_FILE tells Ruby's OpenSSL library to use our custom CA roots (Which
-# is Mozilla's canonical set) to verify syslog TLS servers.
-export SSL_CERT_FILE=/usr/lib/ssl/cert.pem
+erb logstash.config.erb > logstash-${LOGSTASH_VERSION}/logstash.config && \
 
 # LS_HEAP_SIZE sets the jvm Xmx argument when running logstash, which restricts
 # the max heap size. We set this to 64MB below unless it's overridden by
@@ -24,7 +17,13 @@ export SSL_CERT_FILE=/usr/lib/ssl/cert.pem
 # instances we may have many accounts on the same machine.
 export LS_HEAP_SIZE=${LOGSTASH_MAX_HEAP_SIZE:-64M}
 
-cd logstash-1.4.2
+# The current logstash-output-elasticsearch plugin floods the console logs with
+# INFO-level logs from org.apache.http.* about HTTP retries. These log messages
+# don't seem to indicate an actual error, so we're suppressing them here with a
+# custom log4j.properties configuration.
+export LS_JAVA_OPTS="-Dlog4j.configuration=file:/log4j.properties"
+
+cd logstash-${LOGSTASH_VERSION}
 while true; do
     bin/logstash -f logstash.config
     sleep 1
