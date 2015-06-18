@@ -1,5 +1,5 @@
 #!/bin/bash
-LOGSTASH_VERSION="1.5.0"
+LOGSTASH_VERSION="1.5.1"
 if [ ! -f /tmp/certs/jerry.crt ]; then
   echo "Expected certificate in /tmp/certs/jerry.crt."
   exit 1

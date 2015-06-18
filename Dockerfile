@@ -22,23 +22,23 @@ RUN mkdir -p /tmp/split-certs && \
     keytool -list -keystore /usr/lib/jvm/java-1.7-openjdk/jre/lib/security/cacerts --storepass changeit
 
 # Download the logstash tarball, verify its SHA against a golden SHA, extract it.
-RUN curl -O https://download.elastic.co/logstash/logstash/logstash-1.5.0.tar.gz && \
-    echo "9729c2d31fddaabdd3d8e94c34a6d1f61d57f94a  logstash-1.5.0.tar.gz" | sha1sum -c - && \
-    tar zxf logstash-1.5.0.tar.gz
+RUN curl -O https://download.elastic.co/logstash/logstash/logstash-1.5.1.tar.gz && \
+    echo "526bf554d1f1e27354f3816c1a3576a83ac1ca05  logstash-1.5.1.tar.gz" | sha1sum -c - && \
+    tar zxf logstash-1.5.1.tar.gz
 
 # Install our syslog output implementation
 RUN apk-install git && \
     echo "gem 'logstash-output-syslog', :git => 'https://github.com/aaw/logstash-output-syslog'," \
-         ":branch => 'aptible'" >> /logstash-1.5.0/Gemfile && \
-    /logstash-1.5.0/bin/plugin install --no-verify && \
+         ":branch => 'aptible'" >> /logstash-1.5.1/Gemfile && \
+    /logstash-1.5.1/bin/plugin install --no-verify && \
     apk del git
 
 # The logstash-output-elasticsearch plugin needs log4j-1.2.17.jar added to its
 # runtime dependencies so that we can suppress some of the Java logging. This
 # jar already exists in the dependencies for some other plugins, so we just copy
 # from one of them.
-RUN cp /logstash-1.5.0/vendor/bundle/jruby/1.9/gems/*/vendor/jar-dependencies/runtime-jars/log4j-1.2.17.jar \
-       /logstash-1.5.0/vendor/bundle/jruby/1.9/gems/logstash-output-elasticsearch*/vendor/jar-dependencies/runtime-jars/
+RUN cp /logstash-1.5.1/vendor/bundle/jruby/1.9/gems/*/vendor/jar-dependencies/runtime-jars/log4j-1.2.17.jar \
+       /logstash-1.5.1/vendor/bundle/jruby/1.9/gems/logstash-output-elasticsearch*/vendor/jar-dependencies/runtime-jars/
 
 ADD templates/logstash.config.erb /logstash.config.erb
 ADD templates/log4j.properties /log4j.properties
