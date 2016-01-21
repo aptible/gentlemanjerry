@@ -26,8 +26,15 @@ RUN curl -O https://download.elastic.co/logstash/logstash/logstash-1.5.1.tar.gz 
     echo "526bf554d1f1e27354f3816c1a3576a83ac1ca05  logstash-1.5.1.tar.gz" | sha1sum -c - && \
     tar zxf logstash-1.5.1.tar.gz
 
+# Update http output gem
 # Install our syslog output implementation
 RUN apk-install git && \
+    grep -v 'logstash-output-http' /logstash-1.5.1/Gemfile > /logstash-1.5.1/Gemfile.tmp && \
+    mv /logstash-1.5.1/Gemfile.tmp /logstash-1.5.1/Gemfile && \
+    echo "gem 'logstash-output-http', :git => 'https://github.com/krallin/logstash-output-http'," \
+         ":ref => '77de2b1'" >> /logstash-1.5.1/Gemfile && \
+    echo "gem 'logstash-mixin-http_client', :git => 'https://github.com/krallin/logstash-mixin-http_client'," \
+         ":ref => '68fa376'" >> /logstash-1.5.1/Gemfile && \
     echo "gem 'logstash-output-syslog', :git => 'https://github.com/aaw/logstash-output-syslog'," \
          ":branch => 'aptible'" >> /logstash-1.5.1/Gemfile && \
     /logstash-1.5.1/bin/plugin install --no-verify && \
