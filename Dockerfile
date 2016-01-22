@@ -1,25 +1,18 @@
 FROM quay.io/aptible/alpine
 
-RUN apk update && apk-install curl openjdk7-jre-base ruby
+RUN apk update && apk-install curl openjdk7-jre-base ruby java-cacerts
 
-# Download a snapshot of Mozilla's root certificates file and save it to
-# /usr/lib/ssl/cert.pem. We need this to validate the certificate chains of
-# various off-brand certs used by papertrail, logentries, etc.
-RUN curl -O https://papertrailapp.com/tools/papertrail-bundle.pem && \
-    echo "ab6a49f7788235bab954500c46e0c4a9c451797c  papertrail-bundle.pem" | sha1sum -c -
+# Add extra certificates. Specifically, rapidssl is needed because it's used
+# by Papertrail.
+ENV LOCAL_TRUST_DIR /usr/local/share/ca-certificates
+ADD rapidssl.crt "$LOCAL_TRUST_DIR/rapidssl.crt"
+RUN update-ca-certificates
 
-# The OpenJDK package comes with an empty cacerts file, so we need to generate
-# one from the certificate bundle above so that logstash plugin installation will
-# work and TLS-TCP syslog will work without setting an SSL_CERT_FILE environment
-# variable. Adding everything from papertrail-bundle.pem to the cacerts file
-# involves splitting the bundle into its constituent certificates and importing
-# them one-by-one into the generated cacerts file.
-RUN mkdir -p /tmp/split-certs && \
-    cat papertrail-bundle.pem | \
-      awk 'split_after==1{n++;split_after=0} /-----END CERTIFICATE-----/ {split_after=1} {print > "/tmp/split-certs/cert" n ".pem"}' && \
-    find /tmp/split-certs/* -exec keytool -import -trustcacerts -storepass changeit -noprompt -file {} -alias {} \
-      -keystore /usr/lib/jvm/java-1.7-openjdk/jre/lib/security/cacerts \; && \
-    keytool -list -keystore /usr/lib/jvm/java-1.7-openjdk/jre/lib/security/cacerts --storepass changeit
+# And actually ensure Java uses the system trustore java-cacerts creates
+RUN JAVA_TRUSTSTORE=/usr/lib/jvm/java-1.7-openjdk/jre/lib/security/cacerts \
+ && SYSTEM_TRUSTSTORE=/etc/ssl/certs/java/cacerts \
+ && rm "$JAVA_TRUSTSTORE" \
+ && ln -s "$SYSTEM_TRUSTSTORE" "$JAVA_TRUSTSTORE"
 
 # Download the logstash tarball, verify its SHA against a golden SHA, extract it.
 RUN curl -O https://download.elastic.co/logstash/logstash/logstash-1.5.1.tar.gz && \
