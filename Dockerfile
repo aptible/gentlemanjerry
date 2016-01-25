@@ -1,6 +1,7 @@
 FROM quay.io/aptible/alpine
 
-RUN apk update && apk-install curl openjdk7-jre-base ruby java-cacerts
+ENV JDK_VERSION openjdk7
+RUN apk update && apk-install curl "${JDK_VERSION}-jre-base" ruby java-cacerts
 
 # Add extra certificates. Specifically, rapidssl is needed because it's used
 # by Papertrail.
@@ -39,7 +40,7 @@ ADD bin/run-gentleman-jerry.sh run-gentleman-jerry.sh
 
 # Run tests
 ADD test /tmp/test
-RUN bats /tmp/test
+RUN /tmp/test/run_tests.sh
 
 # A volume containing a certificate pair named jerry.key/jerry.crt must be mounted into
 # this directory on the container.
