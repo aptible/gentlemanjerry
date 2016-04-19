@@ -27,5 +27,11 @@ filter {
   <%= ENV['LOGSTASH_FILTERS'] || "" %>
 }
 output {
-  <%= ENV['LOGSTASH_OUTPUT_CONFIG'] || "stdout { codec => rubydebug }" %>
+  <%=
+    # The block is only called if there is a match, which ensures we crash
+    # if __LOAD_SCRIPT_SHA__ was provided but not LOAD_SCRIPT_SHA, but proceed
+    # without error if __LOAD_SCRIPT_SHA__ was not provided.
+    (ENV['LOGSTASH_OUTPUT_CONFIG'] || "stdout { codec => rubydebug }")
+    .gsub('__LOAD_SCRIPT_SHA__') { |_| ENV.fetch('LOAD_SCRIPT_SHA') }
+  %>
 }

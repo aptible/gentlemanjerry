@@ -24,54 +24,69 @@ teardown() {
   [[ "$output" =~ "/tmp/certs/jerry.key" ]]
 }
 
-@test "Gentleman Jerry should start up with a default configuration" {
+generate_certs() {
   openssl req -x509 -batch -nodes -newkey rsa:2048 -keyout /tmp/certs/jerry.key -out /tmp/certs/jerry.crt
+}
 
+wait_for_gentlemanjerry() {
   # Unfortunately, it takes a while for logstash to start up. The tests below
   # run the gentlemanjerry startup script in the background, then tail its
   # output until we see a single line of output or 120 seconds have elapsed.
   # When either condition is met, we kill the logstash process and test the
   # output against what we expect.
+  jerry_log_file="/tmp/logs/jerry.logs"
 
-  /bin/bash run-gentleman-jerry.sh > /tmp/logs/jerry.logs &
-  run timeout -t 120 grep -q "Logstash startup completed" <(tail -f /tmp/logs/jerry.logs)
+  /bin/bash run-gentleman-jerry.sh > "$jerry_log_file" &
+  timeout -t 120 grep -q "Logstash startup completed" <(tail -f "$jerry_log_file") || {
+    echo "Gentlemanjerry did not start in time, or failed to start:"
+    cat "$jerry_log_file"
+    return 1
+  }
+}
+
+kill_gentlemanjerry() {
   pkill -f run-gentleman-jerry
   pkill -f 'java.*logstash'
-  [ "$status" -eq 0 ]  # Command should have finished before timeout. We'd get 143 if it timed out.
+}
+
+@test "Gentleman Jerry should start up with a default configuration" {
+  generate_certs
+  wait_for_gentlemanjerry
+  kill_gentlemanjerry
 }
 
 @test "Gentleman Jerry should start up with a syslog output configuration" {
-  openssl req -x509 -batch -nodes -newkey rsa:2048 -keyout /tmp/certs/jerry.key -out /tmp/certs/jerry.crt
+  generate_certs
   export LOGSTASH_OUTPUT_CONFIG="syslog { facility => \"daemon\" host => \"127.0.0.1\" port => 514 severity => \"emergency\" }"
+  wait_for_gentlemanjerry
+  kill_gentlemanjerry
+}
 
-  # Unfortunately, it takes a while for logstash to start up. The tests below
-  # run the gentlemanjerry startup script in the background, then tail its
-  # output until we see two lines of output or 120 seconds have elapsed. When
-  # either condition is met, we kill the logstash process and test the output
-  # against what we expect.
+@test "Gentleman Jerry should start up with a Redis pubsub configuration" {
+  export REDIS_PASSWORD="foobar123"
 
-  /bin/bash run-gentleman-jerry.sh > /tmp/logs/jerry.logs &
-  run timeout -t 120 grep -q "Logstash startup completed" <(tail -f /tmp/logs/jerry.logs)
-  pkill -f run-gentleman-jerry
-  pkill -f 'java.*logstash'
-  [ "$status" -eq 0 ]  # Command should have finished before timeout. We'd get 143 if it timed out.
+  export LOGSTASH_OUTPUT_CONFIG="redis {
+    data_type => \"script\"
+    key => \"__LOAD_SCRIPT_SHA__\"
+    password => \"${REDIS_PASSWORD}\"
+  }"
+
+  generate_certs
+  wait_for_gentlemanjerry
+
+  # Check that stunnel and Redis came online as well
+  pgrep stunnel
+  pgrep redis-server
+
+  kill_gentlemanjerry
+  pkill redis-server
+  pkill stunnel
 }
 
 @test "Gentleman Jerry should restart if it dies" {
-  openssl req -x509 -batch -nodes -newkey rsa:2048 -keyout /tmp/certs/jerry.key -out /tmp/certs/jerry.crt
+  generate_certs
   export LOGSTASH_OUTPUT_CONFIG="syslog { facility => \"daemon\" host => \"127.0.0.1\" port => 514 severity => \"emergency\" }"
-
-  # Unfortunately, it takes a while for logstash to start up. The tests below
-  # run the gentlemanjerry startup script in the background, then tail its
-  # output until we see two lines of output or 120 seconds have elapsed. At that
-  # point, if we haven't timed out, GentlemanJerry has started. We then kill
-  # the logstash process and wait for GentlemanJerry to restart, which should
-  # create 5 lines in the log (2 for the first startup, 1 to report the restart,
-  # then 2 more for the final startup).
-
-  /bin/bash run-gentleman-jerry.sh > /tmp/logs/jerry.logs &
-  timeout -t 120 grep -q "Logstash startup completed" <(tail -f /tmp/logs/jerry.logs)
-  pkill -f 'tail'
+  wait_for_gentlemanjerry
   pkill -f 'java.*logstash'
   run timeout -t 120 grep -q "GentlemanJerry died, restarting..." <(tail -f /tmp/logs/jerry.logs)
   pkill -f 'tail'
