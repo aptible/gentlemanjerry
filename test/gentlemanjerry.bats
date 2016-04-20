@@ -36,12 +36,18 @@ wait_for_gentlemanjerry() {
   # output against what we expect.
   jerry_log_file="/tmp/logs/jerry.logs"
 
-  /bin/bash run-gentleman-jerry.sh > "$jerry_log_file" &
-  timeout -t 120 grep -q "Logstash startup completed" <(tail -f "$jerry_log_file") || {
-    echo "Gentlemanjerry did not start in time, or failed to start:"
-    cat "$jerry_log_file"
-    return 1
-  }
+  /bin/bash run-gentleman-jerry.sh 2>&1 > "$jerry_log_file" &
+
+  for i in $(seq 1 120); do
+    if grep -q "Logstash startup completed" "$jerry_log_file"; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  echo "Gentlemanjerry did not start in time, or failed to start:"
+  cat "$jerry_log_file"
+  return 1
 }
 
 kill_gentlemanjerry() {
