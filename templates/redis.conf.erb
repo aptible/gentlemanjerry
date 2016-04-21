@@ -17,8 +17,8 @@ appendonly no
 # Enforce authentication using the drain password.
 requirepass <%= ENV['REDIS_PASSWORD'] %>
 
-# Allow up to 8 MB of log buffer storage.
-maxmemory 8mb
+# Allow up to 8 MB of log buffer storage by default.
+maxmemory <%= ENV['REDIS_ALLOWED_MEMORY'] || '8mb' %>
 
 # If we hit the memory limit, then kill the oldest key.
 maxmemory-policy volatile-ttl

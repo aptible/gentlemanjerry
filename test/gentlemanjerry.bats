@@ -1,29 +1,5 @@
 #!/usr/bin/env bats
 
-setup() {
-  mkdir /tmp/certs
-  mkdir /tmp/logs
-}
-
-teardown() {
-  rm -rf /tmp/certs
-  rm -rf /tmp/logs
-}
-
-@test "Gentleman Jerry reports an error if its certificate isn't in /tmp/certs" {
-  touch /tmp/certs/jerry.key
-  run /bin/bash run-gentleman-jerry.sh
-  [ "$status" -eq 1 ]
-  [[ "$output" =~ "/tmp/certs/jerry.crt" ]]
-}
-
-@test "Gentleman Jerry reports an error if its private key isn't in /tmp/certs" {
-  touch /tmp/certs/jerry.crt
-  run /bin/bash run-gentleman-jerry.sh
-  [ "$status" -eq 1 ]
-  [[ "$output" =~ "/tmp/certs/jerry.key" ]]
-}
-
 generate_certs() {
   openssl req -x509 -batch -nodes -newkey rsa:2048 -keyout /tmp/certs/jerry.key -out /tmp/certs/jerry.crt
 }
@@ -50,22 +26,46 @@ wait_for_gentlemanjerry() {
   return 1
 }
 
-kill_gentlemanjerry() {
-  pkill -f run-gentleman-jerry
-  pkill -f 'java.*logstash'
+setup() {
+  mkdir /tmp/certs
+  mkdir /tmp/logs
+}
+
+teardown() {
+  # Here again, we kill everything with SIGKILL, to ensure that nothing stays
+  # up between tests / takes a little while to exit.
+  pkill -KILL -f run-gentleman-jerry
+  pkill -KILL -f 'java.*logstash'
+  pkill -KILL redis-server || true
+  pkill -KILL stunnel || true
+
+  rm -rf /tmp/certs
+  rm -rf /tmp/logs
+}
+
+@test "Gentleman Jerry reports an error if its certificate isn't in /tmp/certs" {
+  touch /tmp/certs/jerry.key
+  run /bin/bash run-gentleman-jerry.sh
+  [ "$status" -eq 1 ]
+  [[ "$output" =~ "/tmp/certs/jerry.crt" ]]
+}
+
+@test "Gentleman Jerry reports an error if its private key isn't in /tmp/certs" {
+  touch /tmp/certs/jerry.crt
+  run /bin/bash run-gentleman-jerry.sh
+  [ "$status" -eq 1 ]
+  [[ "$output" =~ "/tmp/certs/jerry.key" ]]
 }
 
 @test "Gentleman Jerry should start up with a default configuration" {
   generate_certs
   wait_for_gentlemanjerry
-  kill_gentlemanjerry
 }
 
 @test "Gentleman Jerry should start up with a syslog output configuration" {
   generate_certs
   export LOGSTASH_OUTPUT_CONFIG="syslog { facility => \"daemon\" host => \"127.0.0.1\" port => 514 severity => \"emergency\" }"
   wait_for_gentlemanjerry
-  kill_gentlemanjerry
 }
 
 @test "Gentleman Jerry should start up with a Redis pubsub configuration" {
@@ -77,6 +77,10 @@ kill_gentlemanjerry() {
     password => \"${REDIS_PASSWORD}\"
   }"
 
+  export LOGSTASH_FILTERS="ruby {
+    code => 'event[\"unix_timestamp\"] = event[\"@timestamp\"].to_i'
+  }"
+
   generate_certs
   wait_for_gentlemanjerry
 
@@ -84,9 +88,22 @@ kill_gentlemanjerry() {
   pgrep stunnel
   pgrep redis-server
 
-  kill_gentlemanjerry
-  pkill redis-server
-  pkill stunnel
+  # Now, send some traffic into Logstash
+  "/logstash-${LOGSTASH_VERSION}/bin/logstash" -f "${BATS_TEST_DIRNAME}/feed-logstash.config"
+
+  # And check if Redis received the message
+  found_buffer_map=0
+  for _ in $(seq 1 20); do
+    echo $(date) >> /search
+    echo "Looking for buffer map??"
+    redis-cli -a "$REDIS_PASSWORD" KEYS '*' > "/tmp/logs/keys"
+    if grep "buffer-map" "/tmp/logs/keys"; then
+      found_buffer_map=1
+      break
+    fi
+    sleep 1
+  done
+  [[ "$found_buffer_map" -eq 1 ]]
 }
 
 @test "Gentleman Jerry should restart if it dies" {
@@ -94,9 +111,9 @@ kill_gentlemanjerry() {
   export LOGSTASH_OUTPUT_CONFIG="syslog { facility => \"daemon\" host => \"127.0.0.1\" port => 514 severity => \"emergency\" }"
   wait_for_gentlemanjerry
   pkill -f 'java.*logstash'
-  run timeout -t 120 grep -q "GentlemanJerry died, restarting..." <(tail -f /tmp/logs/jerry.logs)
+  run timeout 120 grep -q "GentlemanJerry died, restarting..." <(tail -f /tmp/logs/jerry.logs)
   pkill -f 'tail'
-  run timeout -t 120 grep -q "Logstash startup completed" <(tail -f /tmp/logs/jerry.logs)
+  run timeout 120 grep -q "Logstash startup completed" <(tail -f /tmp/logs/jerry.logs)
   pkill -f 'tail'
   pkill -f run-gentleman-jerry
   pkill -f 'java.*logstash'
@@ -109,15 +126,15 @@ kill_gentlemanjerry() {
 # variable, which Ruby reads. These next few tests verify that this cert file works.
 
 @test "Gentleman Jerry can verify logs.papertrailapp.com:514's certificate" {
-  run timeout -t 3 openssl s_client -CAfile /etc/ssl/certs/ca-certificates.crt -connect logs.papertrailapp.com:514
+  run timeout 3 openssl s_client -CAfile /etc/ssl/certs/ca-certificates.crt -connect logs.papertrailapp.com:514
   [[ "$output" =~ "Verify return code: 0 (ok)" ]]
-  run timeout -t 3 java -cp /tmp/test SslTest logs.papertrailapp.com 514
+  run timeout 3 java -cp /tmp/test SslTest logs.papertrailapp.com 514
   [ "$status" -eq 0 ]
 }
 
 @test "Gentleman Jerry can verify api.logentries.com:25414's certificate" {
-  run timeout -t 3 openssl s_client -CAfile /etc/ssl/certs/ca-certificates.crt -connect api.logentries.com:25414
+  run timeout 3 openssl s_client -CAfile /etc/ssl/certs/ca-certificates.crt -connect api.logentries.com:25414
   [[ "$output" =~ "Verify return code: 0 (ok)" ]]
-  run timeout -t 3 java -cp /tmp/test SslTest api.logentries.com 25414
+  run timeout 3 java -cp /tmp/test SslTest api.logentries.com 25414
   [ "$status" -eq 0 ]
 }
