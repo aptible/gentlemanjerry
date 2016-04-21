@@ -88,6 +88,10 @@ teardown() {
   pgrep stunnel
   pgrep redis-server
 
+  # Check that we can connect over ssl
+  run timeout 3 openssl s_client -CAfile "/tmp/certs/jerry.crt" -connect localhost:6000
+  [[ "$output" =~ "Verify return code: 0 (ok)" ]]
+
   # Now, send some traffic into Logstash
   "/logstash-${LOGSTASH_VERSION}/bin/logstash" -f "${BATS_TEST_DIRNAME}/feed-logstash.config"
 
