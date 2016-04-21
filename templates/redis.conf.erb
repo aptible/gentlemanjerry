@@ -23,6 +23,9 @@ maxmemory <%= ENV['REDIS_ALLOWED_MEMORY'] || '8mb' %>
 # If we hit the memory limit, then kill the oldest key.
 maxmemory-policy volatile-ttl
 
-# Rename all the other commands here to disable them...? (rename-command)
 # We only need and will ever use one database
 databases 1
+
+# Disable the CONFIG command: we don't want users (accidentally or
+# deliberately) abusing a tail drain as a redis server.
+rename-command CONFIG ""
