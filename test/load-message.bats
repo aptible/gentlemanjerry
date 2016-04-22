@@ -109,24 +109,31 @@ teardown() {
   redis-cli SET "conf-bufferBucketCount" 2
   now="$(date +%s)"
 
-  # Send some messages now
-  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "$now" "Bucket 0 message 1")"
-  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "$now" "Bucket 0 message 2")"
+  # Send some that are 2 minutes old (will be evicted)
+  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "$((now - 120))" "Bucket 0 message 1")"
+  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "$((now - 120))" "Bucket 0 message 2")"
 
   # Send some that are a minute old
   redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "$((now - 60))" "Bucket 1 message 1")"
   redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "$((now - 60))" "Bucket 1 message 2")"
 
-  # And some that are 2 minutes old
-  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "$((now - 120))" "Bucket 2 message 1")"
-  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "$((now - 120))" "Bucket 2 message 2")"
+  # Send some messages now
+  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "$now" "Bucket 2 message 1")"
+  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "$now" "Bucket 2 message 2")"
 
-  # Now, we expect to only find a total of 4 messages, in 2 buckets.
+  # Now, we expect to only find a total of 4 messages, in 2 buckets (because we only retain 2).
   bucket_count="$(dump_buffers)"
 
   [[ "$bucket_count" -eq 2 ]]
   [[ "$(count_unique_messages "$STREAM_FILE")" -eq "6" ]]
   [[ "$(count_unique_messages "$BUFFER_FILE")" -eq "4" ]]
+
+  # Finally, we expect the order to be from oldest to newest.
+  run cat "$BUFFER_FILE"
+  [[ ${lines[0]} =~ "Bucket 1 message 1" ]]
+  [[ ${lines[1]} =~ "Bucket 1 message 2" ]]
+  [[ ${lines[2]} =~ "Bucket 2 message 1" ]]
+  [[ ${lines[3]} =~ "Bucket 2 message 2" ]]
 }
 
 @test "It does not run out of memory" {

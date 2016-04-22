@@ -27,15 +27,20 @@ local publishRet = redis.call("PUBLISH", "stream-" .. appName, messageJson)
 local bufferBucketIndex = math.floor(message.unix_timestamp / pBufferBucketInterval) * pBufferBucketInterval
 local bufferBucketName = "buffer-bucket-" .. appName .. "-" .. bufferBucketIndex
 
--- Add the message to the bucket, and set (or refresh) a TTL on the bucket.
--- This will ensure the message is eventually expired, and will also be used
--- by Redis to inform OOM eviction decisions.
-redis.call("LPUSH", bufferBucketName, messageJson)
+-- New messages are added at the right end of the bucket, which means that
+-- messages will be sorted from first received to last received (note: the
+-- ordering within a bucket is based on the order in which the messages were
+-- received, not their actual timestamp).
+redis.call("RPUSH", bufferBucketName, messageJson)
+
+-- Set a  TTL, which ensures we eventually expire the bucket, and will be used
+-- by Redis to inform OOM eviction decisions (oldest buckets - which will
+-- expire the soonest - are evicted first).
 redis.call("EXPIREAT", bufferBucketName, message.unix_timestamp + pBufferLifetime)
 
--- Finally, store the buffer name in a buffer map. The buffer map is a sorted
--- set where we sort buffer bucket names by their timestamp, which means we can
--- query recent logs by hitting the more recent records in the set.
+-- Finally, store the bucket name in a buffer map. The buffer map is a sorted
+-- set where we sort bucket names by their timestamp. Thus, when we query the
+-- set via ZRANGE ... 0 -1, we'll get the buckets from oldest to newest.
 local bufferMapName = "buffer-map-" .. appName
 redis.call("ZADD", bufferMapName, bufferBucketIndex, bufferBucketName)
 
