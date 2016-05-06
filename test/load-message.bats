@@ -136,6 +136,11 @@ teardown() {
   [[ ${lines[3]} =~ "Bucket 2 message 2" ]]
 }
 
+@test "It does not error upon receving a junk message" {
+  run redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "{}"
+  [[ ! "$output" =~ "ERR" ]]
+}
+
 @test "It does not run out of memory" {
   # We'll send messages that are about 40kB. We should not be able to store
   # more than 50 of those, so we'll send 100.
