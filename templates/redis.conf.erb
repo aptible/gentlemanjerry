@@ -1,0 +1,31 @@
+# Don't daemonize, since we want the logs to go to stdout
+daemonize no
+
+# Only listen on localhost. We'll expose Redis over SSL via stunnel for other
+# traffic.
+bind 127.0.0.1
+
+# It's fine for clients to be idle, provided they are alive.
+timeout 0
+tcp-keepalive 60
+
+# We're using Redis to route logs under pub / sub.  No use saving anything, so
+# we'll disable RDB and AOF persistence.
+save ""
+appendonly no
+
+# Enforce authentication using the drain password.
+requirepass <%= ENV['REDIS_PASSWORD'] %>
+
+# Allow up to 8 MB of log buffer storage by default.
+maxmemory <%= ENV['REDIS_ALLOWED_MEMORY'] || '8mb' %>
+
+# If we hit the memory limit, then kill the oldest key.
+maxmemory-policy volatile-ttl
+
+# We only need and will ever use one database
+databases 1
+
+# Disable the CONFIG command: we don't want users (accidentally or
+# deliberately) abusing a tail drain as a redis server.
+rename-command CONFIG ""

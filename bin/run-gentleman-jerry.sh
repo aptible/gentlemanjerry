@@ -1,5 +1,6 @@
 #!/bin/bash
-LOGSTASH_VERSION="1.5.1"
+set -o errexit
+
 if [ ! -f /tmp/certs/jerry.crt ]; then
   echo "Expected certificate in /tmp/certs/jerry.crt."
   exit 1
@@ -8,7 +9,28 @@ if [ ! -f /tmp/certs/jerry.key ]; then
   echo "Expected key in /tmp/certs/jerry.key."
   exit 1
 fi
-erb logstash.config.erb > logstash-${LOGSTASH_VERSION}/logstash.config && \
+
+if [[ -n "$REDIS_PASSWORD" ]]; then
+  echo "Generating Redis configuration"
+  erb redis.conf.erb > /redis.conf
+
+  echo "Starting stunnel (SSL reverse proxy)"
+  stunnel /stunnel.conf &
+
+  echo "Starting Redis"
+  redis-server /redis.conf &
+
+  # Now, load the script
+  echo "Loading script"
+  until LOAD_SCRIPT_SHA="$(redis-cli -a "$REDIS_PASSWORD" SCRIPT LOAD "$(cat "/load-message.lua")")"; do
+    echo "Redis is not up yet... Retrying in 1s"
+    sleep 1
+  done
+  export LOAD_SCRIPT_SHA
+fi
+
+echo "Generating Logstash configuration"
+erb logstash.config.erb > logstash-${LOGSTASH_VERSION}/logstash.config
 
 # LS_HEAP_SIZE sets the jvm Xmx argument when running logstash, which restricts
 # the max heap size. We set this to 64MB below unless it's overridden by

@@ -1,11 +1,44 @@
 #!/usr/bin/env bats
 
+generate_certs() {
+  openssl req -x509 -batch -nodes -newkey rsa:2048 -keyout /tmp/certs/jerry.key -out /tmp/certs/jerry.crt
+}
+
+wait_for_gentlemanjerry() {
+  # Unfortunately, it takes a while for logstash to start up. The tests below
+  # run the gentlemanjerry startup script in the background, then tail its
+  # output until we see a single line of output or 120 seconds have elapsed.
+  # When either condition is met, we kill the logstash process and test the
+  # output against what we expect.
+  jerry_log_file="/tmp/logs/jerry.logs"
+
+  /bin/bash run-gentleman-jerry.sh 2>&1 > "$jerry_log_file" &
+
+  for i in $(seq 1 120); do
+    if grep -q "Logstash startup completed" "$jerry_log_file"; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  echo "Gentlemanjerry did not start in time, or failed to start:"
+  cat "$jerry_log_file"
+  return 1
+}
+
 setup() {
   mkdir /tmp/certs
   mkdir /tmp/logs
 }
 
 teardown() {
+  # Here again, we kill everything with SIGKILL, to ensure that nothing stays
+  # up between tests / takes a little while to exit.
+  pkill -KILL -f run-gentleman-jerry
+  pkill -KILL -f 'java.*logstash'
+  pkill -KILL redis-server || true
+  pkill -KILL stunnel || true
+
   rm -rf /tmp/certs
   rm -rf /tmp/logs
 }
@@ -25,57 +58,66 @@ teardown() {
 }
 
 @test "Gentleman Jerry should start up with a default configuration" {
-  openssl req -x509 -batch -nodes -newkey rsa:2048 -keyout /tmp/certs/jerry.key -out /tmp/certs/jerry.crt
-
-  # Unfortunately, it takes a while for logstash to start up. The tests below
-  # run the gentlemanjerry startup script in the background, then tail its
-  # output until we see a single line of output or 120 seconds have elapsed.
-  # When either condition is met, we kill the logstash process and test the
-  # output against what we expect.
-
-  /bin/bash run-gentleman-jerry.sh > /tmp/logs/jerry.logs &
-  run timeout -t 120 grep -q "Logstash startup completed" <(tail -f /tmp/logs/jerry.logs)
-  pkill -f run-gentleman-jerry
-  pkill -f 'java.*logstash'
-  [ "$status" -eq 0 ]  # Command should have finished before timeout. We'd get 143 if it timed out.
+  generate_certs
+  wait_for_gentlemanjerry
 }
 
 @test "Gentleman Jerry should start up with a syslog output configuration" {
-  openssl req -x509 -batch -nodes -newkey rsa:2048 -keyout /tmp/certs/jerry.key -out /tmp/certs/jerry.crt
+  generate_certs
   export LOGSTASH_OUTPUT_CONFIG="syslog { facility => \"daemon\" host => \"127.0.0.1\" port => 514 severity => \"emergency\" }"
+  wait_for_gentlemanjerry
+}
 
-  # Unfortunately, it takes a while for logstash to start up. The tests below
-  # run the gentlemanjerry startup script in the background, then tail its
-  # output until we see two lines of output or 120 seconds have elapsed. When
-  # either condition is met, we kill the logstash process and test the output
-  # against what we expect.
+@test "Gentleman Jerry should start up with a Redis pubsub configuration" {
+  export REDIS_PASSWORD="foobar123"
 
-  /bin/bash run-gentleman-jerry.sh > /tmp/logs/jerry.logs &
-  run timeout -t 120 grep -q "Logstash startup completed" <(tail -f /tmp/logs/jerry.logs)
-  pkill -f run-gentleman-jerry
-  pkill -f 'java.*logstash'
-  [ "$status" -eq 0 ]  # Command should have finished before timeout. We'd get 143 if it timed out.
+  export LOGSTASH_OUTPUT_CONFIG="redis {
+    data_type => \"script\"
+    key => \"__LOAD_SCRIPT_SHA__\"
+    password => \"${REDIS_PASSWORD}\"
+  }"
+
+  export LOGSTASH_FILTERS="ruby {
+    code => 'event[\"unix_timestamp\"] = event[\"@timestamp\"].to_i'
+  }"
+
+  generate_certs
+  wait_for_gentlemanjerry
+
+  # Check that stunnel and Redis came online as well
+  pgrep stunnel
+  pgrep redis-server
+
+  # Check that we can connect over ssl
+  run timeout 3 openssl s_client -CAfile "/tmp/certs/jerry.crt" -connect localhost:6000
+  [[ "$output" =~ "Verify return code: 0 (ok)" ]]
+
+  # Now, send some traffic into Logstash
+  "/logstash-${LOGSTASH_VERSION}/bin/logstash" -f "${BATS_TEST_DIRNAME}/feed-logstash.config"
+
+  # And check if Redis received the message
+  found_buffer_map=0
+  for _ in $(seq 1 20); do
+    echo $(date) >> /search
+    echo "Looking for buffer map??"
+    redis-cli -a "$REDIS_PASSWORD" KEYS '*' > "/tmp/logs/keys"
+    if grep "buffer-map" "/tmp/logs/keys"; then
+      found_buffer_map=1
+      break
+    fi
+    sleep 1
+  done
+  [[ "$found_buffer_map" -eq 1 ]]
 }
 
 @test "Gentleman Jerry should restart if it dies" {
-  openssl req -x509 -batch -nodes -newkey rsa:2048 -keyout /tmp/certs/jerry.key -out /tmp/certs/jerry.crt
+  generate_certs
   export LOGSTASH_OUTPUT_CONFIG="syslog { facility => \"daemon\" host => \"127.0.0.1\" port => 514 severity => \"emergency\" }"
-
-  # Unfortunately, it takes a while for logstash to start up. The tests below
-  # run the gentlemanjerry startup script in the background, then tail its
-  # output until we see two lines of output or 120 seconds have elapsed. At that
-  # point, if we haven't timed out, GentlemanJerry has started. We then kill
-  # the logstash process and wait for GentlemanJerry to restart, which should
-  # create 5 lines in the log (2 for the first startup, 1 to report the restart,
-  # then 2 more for the final startup).
-
-  /bin/bash run-gentleman-jerry.sh > /tmp/logs/jerry.logs &
-  timeout -t 120 grep -q "Logstash startup completed" <(tail -f /tmp/logs/jerry.logs)
-  pkill -f 'tail'
+  wait_for_gentlemanjerry
   pkill -f 'java.*logstash'
-  run timeout -t 120 grep -q "GentlemanJerry died, restarting..." <(tail -f /tmp/logs/jerry.logs)
+  run timeout 120 grep -q "GentlemanJerry died, restarting..." <(tail -f /tmp/logs/jerry.logs)
   pkill -f 'tail'
-  run timeout -t 120 grep -q "Logstash startup completed" <(tail -f /tmp/logs/jerry.logs)
+  run timeout 120 grep -q "Logstash startup completed" <(tail -f /tmp/logs/jerry.logs)
   pkill -f 'tail'
   pkill -f run-gentleman-jerry
   pkill -f 'java.*logstash'
@@ -88,15 +130,15 @@ teardown() {
 # variable, which Ruby reads. These next few tests verify that this cert file works.
 
 @test "Gentleman Jerry can verify logs.papertrailapp.com:514's certificate" {
-  run timeout -t 3 openssl s_client -CAfile /etc/ssl/certs/ca-certificates.crt -connect logs.papertrailapp.com:514
+  run timeout 3 openssl s_client -CAfile /etc/ssl/certs/ca-certificates.crt -connect logs.papertrailapp.com:514
   [[ "$output" =~ "Verify return code: 0 (ok)" ]]
-  run timeout -t 3 java -cp /tmp/test SslTest logs.papertrailapp.com 514
+  run timeout 3 java -cp /tmp/test SslTest logs.papertrailapp.com 514
   [ "$status" -eq 0 ]
 }
 
 @test "Gentleman Jerry can verify api.logentries.com:25414's certificate" {
-  run timeout -t 3 openssl s_client -CAfile /etc/ssl/certs/ca-certificates.crt -connect api.logentries.com:25414
+  run timeout 3 openssl s_client -CAfile /etc/ssl/certs/ca-certificates.crt -connect api.logentries.com:25414
   [[ "$output" =~ "Verify return code: 0 (ok)" ]]
-  run timeout -t 3 java -cp /tmp/test SslTest api.logentries.com 25414
+  run timeout 3 java -cp /tmp/test SslTest api.logentries.com 25414
   [ "$status" -eq 0 ]
 }
