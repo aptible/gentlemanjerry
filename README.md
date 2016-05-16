@@ -1,6 +1,7 @@
 # ![](https://raw.github.com/aptible/straptible/master/lib/straptible/rails/templates/public.api/icon-60px.png) Gentleman Jerry
 
 ![](https://quay.io/repository/aptible/gentlemanjerry/status?token=10d8074c-a102-46de-a3d1-869397b251ae)
+[![Build Status](https://travis-ci.org/aptible/gentlemanjerry.svg?branch=master)](https://travis-ci.org/aptible/gentlemanjerry)
 
 A log forwarder for Docker container logs which runs as a Docker container itself.
 
