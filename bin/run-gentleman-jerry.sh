@@ -30,7 +30,7 @@ if [[ -n "$REDIS_PASSWORD" ]]; then
 fi
 
 echo "Generating Logstash configuration"
-erb logstash.config.erb > logstash-${LOGSTASH_VERSION}/logstash.config
+erb logstash.config.erb > "logstash-${LOGSTASH_VERSION}/logstash.config"
 
 # LS_HEAP_SIZE sets the jvm Xmx argument when running logstash, which restricts
 # the max heap size. We set this to 64MB below unless it's overridden by
@@ -45,9 +45,10 @@ export LS_HEAP_SIZE=${LOGSTASH_MAX_HEAP_SIZE:-64M}
 # custom log4j.properties configuration.
 export LS_JAVA_OPTS="-Dlog4j.configuration=file:/log4j.properties"
 
-cd logstash-${LOGSTASH_VERSION}
+cd "logstash-${LOGSTASH_VERSION}"
 while true; do
-    bin/logstash -f logstash.config
+    # Ignore errors to ensure we stay up
+    bin/logstash -f logstash.config || true
     sleep 1
     echo "GentlemanJerry died, restarting..."
 done

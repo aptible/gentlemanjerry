@@ -114,8 +114,9 @@ teardown() {
   generate_certs
   export LOGSTASH_OUTPUT_CONFIG="syslog { facility => \"daemon\" host => \"127.0.0.1\" port => 514 severity => \"emergency\" }"
   wait_for_gentlemanjerry
-  pkill -f 'java.*logstash'
-  run timeout 120 grep -q "GentlemanJerry died, restarting..." <(tail -f /tmp/logs/jerry.logs)
+  # Force an unclean shutdown to avoid GentlemanJerry exiting with 0
+  pkill -KILL -f 'java.*logstash'
+  timeout 10 grep -q "GentlemanJerry died, restarting..." <(tail -f /tmp/logs/jerry.logs)
   pkill -f 'tail'
   run timeout 120 grep -q "Logstash startup completed" <(tail -f /tmp/logs/jerry.logs)
   pkill -f 'tail'
