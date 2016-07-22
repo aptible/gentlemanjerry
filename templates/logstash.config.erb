@@ -10,11 +10,12 @@ input {
 filter {
   # Rewrite the @timestamp field from the time field in the Docker logs.
   date {
-    match => [ "time", "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'Z'" ]
+    match => [ "time", "ISO8601", "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'Z'" ]
   }
   # Extract the container id from the file that we're following.
   grok {
     match => [ "file", "/tmp/dockerlogs/%{BASE16NUM:container}" ]
+    match => [ "file", "/tmp/activitylogs/%{BASE16NUM:container}-json.log" ]
   }
   # The next two filters overwrite the host field with the first 12
   # characters of the Docker container id.
