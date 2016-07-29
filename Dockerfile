@@ -49,12 +49,12 @@ RUN apk-install git && \
 RUN cp "/logstash-${LOGSTASH_VERSION}/vendor/bundle/jruby/1.9/gems/"*"/vendor/jar-dependencies/runtime-jars/log4j-1.2.17.jar" \
        "/logstash-${LOGSTASH_VERSION}/vendor/bundle/jruby/1.9/gems/logstash-output-elasticsearch"*"/vendor/jar-dependencies/runtime-jars/"
 
-# The Redis output is used with a local Redis, so we need to isntall it. We also
-# install stunnel as a reverse SSL proxy (we need to install it from testing though,
-# as it's not in the main Alpine repository yet). Finally, we also pull in coreutils,
-# which is a useful convenience in our tests.
+# The Redis output is used with a local Redis, so we need to isntall it. We
+# also install stunnel as a reverse SSL proxy (we need to install it from
+# community though, as it's not in the main Alpine repository yet). Finally, we
+# also pull in coreutils, which is a useful convenience in our tests.
 RUN apk-install coreutils redis && \
-    apk-install --repository "http://dl-cdn.alpinelinux.org/alpine/edge/testing/" stunnel
+    apk-install --repository "http://dl-cdn.alpinelinux.org/alpine/edge/community/" stunnel
 
 ADD templates/stunnel.conf /stunnel.conf
 ADD templates/redis.conf.erb /redis.conf.erb
