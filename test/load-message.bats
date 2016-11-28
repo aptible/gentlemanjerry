@@ -7,9 +7,28 @@ function redis-cli() {
 }
 
 function make_message() {
-  local when="$1"
-  local what="$2"
-  printf '{ "unix_timestamp": %d, "app": "myapp", "log": "%s" }' "$when" "$what"
+  local layer="$1"
+  local when="$2"
+  local what="$3"
+  printf "{ \"unix_timestamp\": %d, \"$layer\": \"myapp\", \"layer\": \"$layer\", \"log\": \"%s\" }" "$when" "$what"
+}
+
+function subscribe_to_stream() {
+  local layer="$1"
+
+  local name=""
+
+  if [[ "$layer" = "app" ]]; then
+    name="stream-myapp"
+  elif [[ "$layer" = "database" ]]; then
+    name="stream-database:myapp"
+  else
+    echo "Invalid layer: ${layer}"
+    return 1
+  fi
+
+  redis-cli SUBSCRIBE "$name" 2>&1 > "$STREAM_FILE" &
+  export REDIS_SUBSCRIBER_PID="$!"
 }
 
 function dump_buffers() {
@@ -55,9 +74,6 @@ setup() {
 
   wait_for redis-cli GET test
 
-  redis-cli SUBSCRIBE "stream-myapp" 2>&1 > "$STREAM_FILE" &
-  export REDIS_SUBSCRIBER_PID=$!
-
   LOAD_SCRIPT_SHA="$(redis-cli SCRIPT LOAD "$(cat "/load-message.lua")")"
   export LOAD_SCRIPT_SHA
 }
@@ -71,17 +87,32 @@ teardown() {
 }
 
 @test "It delivers incoming logs to subscribers" {
+  subscribe_to_stream "app"
+
   ts="$(date +%s)"
-  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "$ts" "Some message")"
-  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "$ts" "More message")"
+  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "app" "$ts" "Some message")"
+  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "app" "$ts" "More message")"
+
+  wait_for grep "Some message" "$STREAM_FILE"
+  wait_for grep "More message" "$STREAM_FILE"
+}
+
+@test "It routes database messages" {
+  subscribe_to_stream "database"
+
+  ts="$(date +%s)"
+  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "database" "$ts" "Some message")"
+  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "database" "$ts" "More message")"
 
   wait_for grep "Some message" "$STREAM_FILE"
   wait_for grep "More message" "$STREAM_FILE"
 }
 
 @test "It buffers recent incoming logs" {
+  subscribe_to_stream "app"
+
   ts="$(date +%s)"
-  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "$ts" "Some message")"
+  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "app" "$ts" "Some message")"
 
   wait_for grep "Some message" "$STREAM_FILE"
 
@@ -92,9 +123,11 @@ teardown() {
 }
 
 @test "It delivers outdated incoming logs to subscribers, but does not buffer them" {
+  subscribe_to_stream "app"
+
   now="$(date +%s)"
   ts="$((now - 3600))"  # 1 hour old
-  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "$ts" "Some message")"
+  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "app" "$ts" "Some message")"
 
   wait_for grep "Some message" "$STREAM_FILE"
 
@@ -106,20 +139,22 @@ teardown() {
 }
 
 @test "It breaks down messages in buffer buckets, and expires them" {
+  subscribe_to_stream "app"
+
   redis-cli SET "conf-bufferBucketCount" 2
   now="$(date +%s)"
 
   # Send some that are 2 minutes old (will be evicted)
-  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "$((now - 120))" "Bucket 0 message 1")"
-  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "$((now - 120))" "Bucket 0 message 2")"
+  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "app" "$((now - 120))" "Bucket 0 message 1")"
+  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "app" "$((now - 120))" "Bucket 0 message 2")"
 
   # Send some that are a minute old
-  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "$((now - 60))" "Bucket 1 message 1")"
-  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "$((now - 60))" "Bucket 1 message 2")"
+  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "app" "$((now - 60))" "Bucket 1 message 1")"
+  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "app" "$((now - 60))" "Bucket 1 message 2")"
 
   # Send some messages now
-  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "$now" "Bucket 2 message 1")"
-  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "$now" "Bucket 2 message 2")"
+  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "app" "$now" "Bucket 2 message 1")"
+  redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$(make_message "app" "$now" "Bucket 2 message 2")"
 
   # Now, we expect to only find a total of 4 messages, in 2 buckets (because we only retain 2).
   bucket_count="$(dump_buffers)"
@@ -137,11 +172,15 @@ teardown() {
 }
 
 @test "It does not error upon receving a junk message" {
+  subscribe_to_stream "app"
+
   run redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "{}"
   [[ ! "$output" =~ "ERR" ]]
 }
 
 @test "It does not run out of memory" {
+  subscribe_to_stream "app"
+
   # We'll send messages that are about 40kB. We should not be able to store
   # more than 50 of those, so we'll send 100.
   n_messages=100
@@ -149,7 +188,7 @@ teardown() {
   ts="$(date +%s)"
   payload="$(head -c "$((3072 * 10))" "/dev/urandom" | base64 | tr --delete '\n')"
 
-  msg="$(make_message "$ts" "$payload")"
+  msg="$(make_message "app" "$ts" "$payload")"
   for i in $(seq 1 "$n_messages"); do
     redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "$msg"
   done

@@ -131,15 +131,15 @@ teardown() {
 # variable, which Ruby reads. These next few tests verify that this cert file works.
 
 @test "Gentleman Jerry can verify logs.papertrailapp.com:514's certificate" {
-  run timeout 3 openssl s_client -CAfile /etc/ssl/certs/ca-certificates.crt -connect logs.papertrailapp.com:514
+  run timeout 10 openssl s_client -CAfile /etc/ssl/certs/ca-certificates.crt -connect logs.papertrailapp.com:514
   [[ "$output" =~ "Verify return code: 0 (ok)" ]]
-  run timeout 3 java -cp /tmp/test SslTest logs.papertrailapp.com 514
+  run timeout 10 java -cp /tmp/test SslTest logs.papertrailapp.com 514
   [ "$status" -eq 0 ]
 }
 
 @test "Gentleman Jerry can verify api.logentries.com:25414's certificate" {
-  run timeout 3 openssl s_client -CAfile /etc/ssl/certs/ca-certificates.crt -connect api.logentries.com:25414
+  run timeout 10 openssl s_client -CAfile /etc/ssl/certs/ca-certificates.crt -connect api.logentries.com:25414
   [[ "$output" =~ "Verify return code: 0 (ok)" ]]
-  run timeout 3 java -cp /tmp/test SslTest api.logentries.com 25414
+  run timeout 10 java -cp /tmp/test SslTest api.logentries.com 25414
   [ "$status" -eq 0 ]
 }
