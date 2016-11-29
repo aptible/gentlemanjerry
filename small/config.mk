@@ -1,0 +1,1 @@
+export LOGSTASH_MAX_HEAP_SIZE=64m
