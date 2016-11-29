@@ -69,6 +69,9 @@ ADD bin/run-gentleman-jerry.sh run-gentleman-jerry.sh
 ADD test /tmp/test
 RUN /tmp/test/run_tests.sh
 
+# Inject the environment corresponding to this container size
+ENV LOGSTASH_MAX_HEAP_SIZE <%= ENV.fetch 'LOGSTASH_MAX_HEAP_SIZE' %>
+
 # A volume containing a certificate pair named jerry.key/jerry.crt must be mounted into
 # this directory on the container.
 VOLUME ["/tmp/certs"]

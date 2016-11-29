@@ -34,9 +34,9 @@ erb logstash.config.erb > "logstash-${LOGSTASH_VERSION}/logstash.config"
 
 # LS_HEAP_SIZE sets the jvm Xmx argument when running logstash, which restricts
 # the max heap size. We set this to 64MB below unless it's overridden by
-# GentlemanJerry's LOGSTASH_HEAP_SIZE. We should be conservative with the heap
-# the GentlemanJerry uses since we have one running per account and on shared
-# instances we may have many accounts on the same machine.
+# GentlemanJerry's LOGSTASH_MAX_HEAP_SIZE. We should be conservative with the
+# heap the GentlemanJerry uses since we have one running per Log Drain and on
+# shared instances we may have many accounts on the same machine.
 export LS_HEAP_SIZE=${LOGSTASH_MAX_HEAP_SIZE:-64M}
 
 # The current logstash-output-elasticsearch plugin floods the console logs with

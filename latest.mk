@@ -1,1 +1,1 @@
-LATEST_TAG = master
+LATEST_TAG = small
