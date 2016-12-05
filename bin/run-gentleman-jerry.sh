@@ -45,6 +45,11 @@ export LS_HEAP_SIZE=${LOGSTASH_MAX_HEAP_SIZE:-64M}
 # custom log4j.properties configuration.
 export LS_JAVA_OPTS="-Dlog4j.configuration=file:/log4j.properties"
 
+# And finally, we configure Java to log GC work. This makes it easier to
+# identify whether Logstash is doing some meaningful work or spending all its
+# CPU time in GC.
+export LS_JAVA_OPTS="${LS_JAVA_OPTS} -XX:+PrintGC"
+
 cd "logstash-${LOGSTASH_VERSION}"
 while true; do
     # Ignore errors to ensure we stay up
