@@ -62,6 +62,12 @@ teardown() {
   wait_for_gentlemanjerry
 }
 
+@test "Gentleman Jerry should allow certificates in the environment" {
+  openssl req -x509 -batch -nodes -newkey rsa:2048 -keyout jerry.key -out jerry.crt
+  SSL_CERTIFICATE="$(cat jerry.crt)" SSL_KEY="$(cat jerry.key)" wait_for_gentlemanjerry
+  rm jerry.key jerry.crt
+}
+
 @test "Gentleman Jerry should start up with a syslog output configuration" {
   generate_certs
   export LOGSTASH_OUTPUT_CONFIG="syslog { facility => \"daemon\" host => \"127.0.0.1\" port => 514 severity => \"emergency\" }"
