@@ -44,8 +44,8 @@ RUN apk-install git && \
          ":ref => '81af883'" >> "$GEMFILE" && \
     echo "gem 'logstash-mixin-http_client', :git => 'https://github.com/krallin/logstash-mixin-http_client'," \
          ":ref => '68fa376'" >> "$GEMFILE" && \
-    echo "gem 'logstash-output-syslog', :git => 'https://github.com/aaw/logstash-output-syslog'," \
-         ":branch => 'aptible'" >> "$GEMFILE" && \
+    echo "gem 'logstash-output-syslog', :git => 'https://github.com/krallin/logstash-output-syslog'," \
+         ":branch => '5e47c50'" >> "$GEMFILE" && \
     echo "gem 'logstash-output-redis', :git => 'https://github.com/krallin/logstash-output-redis'," \
          ":ref => '3fa4b3e'" >> "$GEMFILE" && \
     "/logstash-${LOGSTASH_VERSION}/bin/plugin" install --no-verify && \
