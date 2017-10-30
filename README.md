@@ -59,6 +59,8 @@ port of your choice, say, 1234:
 $ docker run -i -t -p 1234:5000 -v /tmp/jerry-cert:/tmp/certs quay.io/aptible/gentlemanjerry:latest
 ```
 
+Alternatively, you can provide these via the `SSL_CERTIFICATE` and `SSL_KEY` environment variables.
+
 You should see the message "Logstash startup completed" when it's up and running.
 
 Now you're ready to [spawn a Joe Cool](https://github.com/aptible/joecool#Example) and send logs
