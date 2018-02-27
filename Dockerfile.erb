@@ -60,8 +60,10 @@ RUN cp "/logstash-${LOGSTASH_VERSION}/vendor/bundle/jruby/1.9/gems/"*"/vendor/ja
 
 # Now, for some reason, Logstash won't allow us to install this plugin like the others, so we do the next best thing... patch it in place!
 ADD patches/0001-Support-for-ES-5-Pipelines.patch /
+ADD patches/0002-Elasticsearch-Set-Content-Type.patch /
 RUN apk-install patch \
  && patch -p 1 -d "/logstash-${LOGSTASH_VERSION}/vendor/bundle/jruby/1.9/gems/logstash-output-elasticsearch-0.2.8-java" < /0001-Support-for-ES-5-Pipelines.patch \
+ && patch -p 1 -d "/logstash-${LOGSTASH_VERSION}/vendor/bundle/jruby/1.9/gems/logstash-output-elasticsearch-0.2.8-java" < /0002-Elasticsearch-Set-Content-Type.patch \
  && apk del patch
 
 ADD templates/stunnel.conf /stunnel.conf

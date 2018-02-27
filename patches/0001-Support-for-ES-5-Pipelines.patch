@@ -1,7 +1,7 @@
-From 4376b1e60ca3f34eb462e4f656d56df74c1f174c Mon Sep 17 00:00:00 2001
+From c27d9bca61934971e02bbc4f7dda13bb1f023176 Mon Sep 17 00:00:00 2001
 From: Thomas Orozco <thomas@orozco.fr>
-Date: Thu, 2 Feb 2017 18:49:28 +0100
-Subject: [PATCH] Support for ES 5 Pipelines
+Date: Tue, 27 Feb 2018 12:29:21 +0100
+Subject: [PATCH 1/2] Support for ES 5 Pipelines
 
 ---
  lib/logstash/outputs/elasticsearch.rb          |  5 ++++-
@@ -63,5 +63,5 @@ index 8d5026e..3c982a3 100644
  
          if options[:user] && options[:password] then
 -- 
-2.9.0
+2.14.1
 
