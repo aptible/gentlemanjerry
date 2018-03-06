@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 
 generate_certs() {
-  openssl req -x509 -batch -nodes -newkey rsa:2048 -keyout /tmp/certs/jerry.key -out /tmp/certs/jerry.crt
+  openssl req -x509 -batch -nodes -newkey rsa:2048 -subj /CN=localhost/ -keyout /tmp/certs/jerry.key -out /tmp/certs/jerry.crt
 }
 
 wait_for_gentlemanjerry() {
@@ -26,6 +26,34 @@ wait_for_gentlemanjerry() {
   return 1
 }
 
+wait_for_tls12_server() {
+  openssl_log_file="/tmp/logs/openssl.logs"
+
+  generate_certs
+
+  # Manticore actually supports TLSv1.2, but does not support all cipher suites
+  # under TLSv1.2 In particular, it appears to support only the following:
+  # AES256-SHA, DHE-RSA-AES256-SHA, DHE-DSS-AES256-SHA, AES128-SHA,
+  # DHE-RSA-AES128-SHA, DHE-DSS-AES128-SHA, DES-CBC3-SHA, EDH-RSA-DES-CBC3-SHA,
+  # EDH-DSS-DES-CBC3-SHA
+  # Unfortunately, none of these are supported by AWS ALB using the TLSv1.2
+  # security policy (TLS-1-2-2017-01): http://amzn.to/2FiIswH
+  # So, to test whether Manticore can connect to a (presumably common) ALB
+  # TLSv1.2 protocol/cipher config, we allow only AES256-SHA256 server-side.
+  openssl s_server -cipher AES256-SHA256 -tls1_2 -key /tmp/certs/jerry.key -cert /tmp/certs/jerry.crt -www 2>&1 > "$openssl_log_file" &
+
+  for i in $(seq 1 10); do
+    if grep -q "ACCEPT" "$openssl_log_file"; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  echo "openssl s_server did not start in time, or failed to start:"
+  cat "$openssl_log_file"
+  return 1
+}
+
 setup() {
   mkdir /tmp/certs
   mkdir /tmp/logs
@@ -38,6 +66,7 @@ teardown() {
   pkill -KILL -f 'java.*logstash'
   pkill -KILL redis-server || true
   pkill -KILL stunnel || true
+  pkill -KILL openssl || true
 
   rm -rf /tmp/certs
   rm -rf /tmp/logs
@@ -147,5 +176,30 @@ teardown() {
   run timeout 10 openssl s_client -CAfile /etc/ssl/certs/ca-certificates.crt -connect api.logentries.com:25414
   [[ "$output" =~ "Verify return code: 0 (ok)" ]]
   run timeout 10 java -cp /tmp/test SslTest api.logentries.com 25414
+  [ "$status" -eq 0 ]
+}
+
+@test "Gentleman Jerry can connect to a TLSv1.2-only Endpoint" {
+  wait_for_tls12_server
+  run timeout 5 openssl s_client -CAfile /tmp/certs/jerry.crt -connect localhost:4433
+  [[ "$output" =~ "Verify return code: 0 (ok)" ]]
+
+  # Import cert into test truststore
+  keytool -importcert -file /tmp/certs/jerry.crt -keystore /tmp/certs/jerry.jks -storepass changeit -noprompt
+
+  # Set up JRuby and its gems
+  export PATH="/logstash-$LOGSTASH_VERSION/vendor/jruby/bin:$PATH"
+  export GEM_PATH="/logstash-$LOGSTASH_VERSION/vendor/bundle/jruby/1.9"
+
+  run jruby /tmp/test/manticore_test.rb https://localhost:4433 /tmp/certs/jerry.jks
+  [ "$status" -eq 0 ]
+}
+
+@test "Gentleman Jerry can connect to a TLSv1.2-only Endpoint (variant)" {
+  # Set up JRuby and its gems
+  export PATH="/logstash-$LOGSTASH_VERSION/vendor/jruby/bin:$PATH"
+  export GEM_PATH="/logstash-$LOGSTASH_VERSION/vendor/bundle/jruby/1.9"
+
+  run jruby /tmp/test/manticore_test.rb https://tlsv12-elb.aptible-test-grumpycat.com
   [ "$status" -eq 0 ]
 }
