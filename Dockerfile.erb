@@ -1,7 +1,7 @@
-FROM quay.io/aptible/alpine:3.3
+FROM alpine:3.7
 
 ENV JDK_VERSION openjdk7
-RUN apk update && apk-install curl "${JDK_VERSION}-jre-base" ruby java-cacerts
+RUN apk update && apk add --no-cache bash curl "${JDK_VERSION}-jre-base" ruby java-cacerts
 
 # Add extra certificates. Specifically, rapidssl is needed because it's used
 # by Papertrail.
@@ -25,7 +25,7 @@ RUN curl -O "https://download.elastic.co/logstash/logstash/logstash-${LOGSTASH_V
 
 # The Redis output is used with a local Redis, so we need to isntall it. We
 # also pull coreutils, largely for convenience in our tests.
-RUN apk-install coreutils redis
+RUN apk add --no-cache coreutils redis
 
 # Now, we need to install stunnel. It's only in the edge repo, and that package
 # often breaks, so we install from source.
@@ -34,7 +34,7 @@ RUN ./install-stunnel.sh
 
 # Update http output gem
 # Install our syslog output implementation
-RUN apk-install git && \
+RUN apk add --no-cache git && \
     GEMFILE="/logstash-${LOGSTASH_VERSION}/Gemfile" && \
     grep -v 'logstash-output-http' "$GEMFILE" > "${GEMFILE}.tmp" && \
     mv "${GEMFILE}.tmp" "$GEMFILE" && \
@@ -61,7 +61,7 @@ RUN cp "/logstash-${LOGSTASH_VERSION}/vendor/bundle/jruby/1.9/gems/"*"/vendor/ja
 # Now, for some reason, Logstash won't allow us to install this plugin like the others, so we do the next best thing... patch it in place!
 ADD patches/0001-Support-for-ES-5-Pipelines.patch /
 ADD patches/0002-Elasticsearch-Set-Content-Type.patch /
-RUN apk-install patch \
+RUN apk add --no-cache patch \
  && patch -p 1 -d "/logstash-${LOGSTASH_VERSION}/vendor/bundle/jruby/1.9/gems/logstash-output-elasticsearch-0.2.8-java" < /0001-Support-for-ES-5-Pipelines.patch \
  && patch -p 1 -d "/logstash-${LOGSTASH_VERSION}/vendor/bundle/jruby/1.9/gems/logstash-output-elasticsearch-0.2.8-java" < /0002-Elasticsearch-Set-Content-Type.patch \
  && apk del patch
@@ -72,6 +72,15 @@ ADD templates/load-message.lua /load-message.lua
 ADD templates/logstash.config.erb /logstash.config.erb
 ADD templates/log4j.properties /log4j.properties
 ADD bin/run-gentleman-jerry.sh run-gentleman-jerry.sh
+
+# Install BATS (for tests)
+RUN curl -sL https://github.com/sstephenson/bats/archive/master.zip > /tmp/bats.zip \
+    && cd /tmp \
+    && unzip -q bats.zip \
+    && ./bats-master/install.sh /usr/local \
+    # /usr/local/bin/bats should be a symlink, so make it happen.
+    && ln -sf /usr/local/libexec/bats /usr/local/bin/bats \
+    && rm -rf /tmp/bats*
 
 # Run tests
 ADD test /tmp/test

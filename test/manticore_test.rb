@@ -7,7 +7,7 @@ require 'manticore'
 URL, TRUSTSTORE_PATH = ARGV
 if TRUSTSTORE_PATH
   options = { :ssl => { :truststore => TRUSTSTORE_PATH,
-                        :truststore_password => "changeit",
+                        :truststore_password => "testpass",
                         :truststore_type => "JKS" }}
 else
   options = {}

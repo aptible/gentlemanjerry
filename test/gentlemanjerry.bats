@@ -92,7 +92,7 @@ teardown() {
 }
 
 @test "Gentleman Jerry should allow certificates in the environment" {
-  openssl req -x509 -batch -nodes -newkey rsa:2048 -keyout jerry.key -out jerry.crt
+  openssl req -x509 -batch -nodes -newkey rsa:2048 -subj /CN=Example/ -keyout jerry.key -out jerry.crt
   SSL_CERTIFICATE="$(cat jerry.crt)" SSL_KEY="$(cat jerry.key)" wait_for_gentlemanjerry
   rm jerry.key jerry.crt
 }
@@ -152,9 +152,9 @@ teardown() {
   # Force an unclean shutdown to avoid GentlemanJerry exiting with 0
   pkill -KILL -f 'java.*logstash'
   timeout 10 grep -q "GentlemanJerry died, restarting..." <(tail -f /tmp/logs/jerry.logs)
-  pkill -f 'tail'
+  pkill -f 'tail' || true
   run timeout 120 grep -q "Logstash startup completed" <(tail -f /tmp/logs/jerry.logs)
-  pkill -f 'tail'
+  pkill -f 'tail' || true
   pkill -f run-gentleman-jerry
   pkill -f 'java.*logstash'
   [ "$status" -eq 0 ]  # Command should have finished before timeout. We'd get 143 if it timed out.
@@ -181,18 +181,16 @@ teardown() {
 
 @test "Gentleman Jerry can connect to a TLSv1.2-only Endpoint" {
   wait_for_tls12_server
-  run timeout 5 openssl s_client -CAfile /tmp/certs/jerry.crt -connect localhost:4433
-  [[ "$output" =~ "Verify return code: 0 (ok)" ]]
+  timeout 5 openssl s_client -CAfile /tmp/certs/jerry.crt -connect localhost:4433 | grep "Verify return code: 0 (ok)"
 
   # Import cert into test truststore
-  keytool -importcert -file /tmp/certs/jerry.crt -keystore /tmp/certs/jerry.jks -storepass changeit -noprompt
+  keytool -importcert -file /tmp/certs/jerry.crt -keystore /tmp/certs/jerry.jks -storepass testpass -noprompt
 
   # Set up JRuby and its gems
   export PATH="/logstash-$LOGSTASH_VERSION/vendor/jruby/bin:$PATH"
   export GEM_PATH="/logstash-$LOGSTASH_VERSION/vendor/bundle/jruby/1.9"
 
-  run jruby /tmp/test/manticore_test.rb https://localhost:4433 /tmp/certs/jerry.jks
-  [ "$status" -eq 0 ]
+  jruby /tmp/test/manticore_test.rb https://localhost:4433 /tmp/certs/jerry.jks
 }
 
 @test "Gentleman Jerry can connect to a TLSv1.2-only Endpoint (variant)" {
@@ -200,6 +198,5 @@ teardown() {
   export PATH="/logstash-$LOGSTASH_VERSION/vendor/jruby/bin:$PATH"
   export GEM_PATH="/logstash-$LOGSTASH_VERSION/vendor/bundle/jruby/1.9"
 
-  run jruby /tmp/test/manticore_test.rb https://tlsv12-elb.aptible-test-grumpycat.com
-  [ "$status" -eq 0 ]
+  jruby /tmp/test/manticore_test.rb https://tlsv12-elb.aptible-test-grumpycat.com
 }
