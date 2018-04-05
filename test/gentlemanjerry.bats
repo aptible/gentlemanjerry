@@ -186,17 +186,5 @@ teardown() {
   # Import cert into test truststore
   keytool -importcert -file /tmp/certs/jerry.crt -keystore /tmp/certs/jerry.jks -storepass testpass -noprompt
 
-  # Set up JRuby and its gems
-  export PATH="/logstash-$LOGSTASH_VERSION/vendor/jruby/bin:$PATH"
-  export GEM_PATH="/logstash-$LOGSTASH_VERSION/vendor/bundle/jruby/1.9"
-
-  jruby /tmp/test/manticore_test.rb https://localhost:4433 /tmp/certs/jerry.jks
-}
-
-@test "Gentleman Jerry can connect to a TLSv1.2-only Endpoint (variant)" {
-  # Set up JRuby and its gems
-  export PATH="/logstash-$LOGSTASH_VERSION/vendor/jruby/bin:$PATH"
-  export GEM_PATH="/logstash-$LOGSTASH_VERSION/vendor/bundle/jruby/1.9"
-
-  jruby /tmp/test/manticore_test.rb https://tlsv12-elb.aptible-test-grumpycat.com
+  timeout 10 java -Djavax.net.ssl.trustStore=/tmp/certs/jerry.jks -cp /tmp/test SslTest localhost 4433
 }
