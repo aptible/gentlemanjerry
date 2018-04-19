@@ -11,7 +11,7 @@ STUNNEL_URL="https://s3.amazonaws.com/aptible-source-archives/${STUNNEL_ARCHIVE}
 
 STUNNEL_BUILD_DEPS=(build-base linux-headers wget openssl-dev)
 
-apk-install libssl1.0 libcrypto1.0 "${STUNNEL_BUILD_DEPS[@]}"
+apk add --no-cache libssl1.0 libcrypto1.0 "${STUNNEL_BUILD_DEPS[@]}"
 
 BUILD_DIR="$(mktemp -d)"
 pushd "$BUILD_DIR"

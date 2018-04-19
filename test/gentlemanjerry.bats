@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 
 generate_certs() {
-  openssl req -x509 -batch -nodes -newkey rsa:2048 -keyout /tmp/certs/jerry.key -out /tmp/certs/jerry.crt
+  openssl req -x509 -batch -nodes -newkey rsa:2048 -subj /CN=localhost/ -keyout /tmp/certs/jerry.key -out /tmp/certs/jerry.crt
 }
 
 wait_for_gentlemanjerry() {
@@ -26,6 +26,34 @@ wait_for_gentlemanjerry() {
   return 1
 }
 
+wait_for_tls12_server() {
+  openssl_log_file="/tmp/logs/openssl.logs"
+
+  generate_certs
+
+  # Manticore actually supports TLSv1.2, but does not support all cipher suites
+  # under TLSv1.2 In particular, it appears to support only the following:
+  # AES256-SHA, DHE-RSA-AES256-SHA, DHE-DSS-AES256-SHA, AES128-SHA,
+  # DHE-RSA-AES128-SHA, DHE-DSS-AES128-SHA, DES-CBC3-SHA, EDH-RSA-DES-CBC3-SHA,
+  # EDH-DSS-DES-CBC3-SHA
+  # Unfortunately, none of these are supported by AWS ALB using the TLSv1.2
+  # security policy (TLS-1-2-2017-01): http://amzn.to/2FiIswH
+  # So, to test whether Manticore can connect to a (presumably common) ALB
+  # TLSv1.2 protocol/cipher config, we allow only AES256-SHA256 server-side.
+  openssl s_server -cipher AES256-SHA256 -tls1_2 -key /tmp/certs/jerry.key -cert /tmp/certs/jerry.crt -www 2>&1 > "$openssl_log_file" &
+
+  for i in $(seq 1 10); do
+    if grep -q "ACCEPT" "$openssl_log_file"; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  echo "openssl s_server did not start in time, or failed to start:"
+  cat "$openssl_log_file"
+  return 1
+}
+
 setup() {
   mkdir /tmp/certs
   mkdir /tmp/logs
@@ -38,6 +66,7 @@ teardown() {
   pkill -KILL -f 'java.*logstash'
   pkill -KILL redis-server || true
   pkill -KILL stunnel || true
+  pkill -KILL openssl || true
 
   rm -rf /tmp/certs
   rm -rf /tmp/logs
@@ -63,7 +92,7 @@ teardown() {
 }
 
 @test "Gentleman Jerry should allow certificates in the environment" {
-  openssl req -x509 -batch -nodes -newkey rsa:2048 -keyout jerry.key -out jerry.crt
+  openssl req -x509 -batch -nodes -newkey rsa:2048 -subj /CN=Example/ -keyout jerry.key -out jerry.crt
   SSL_CERTIFICATE="$(cat jerry.crt)" SSL_KEY="$(cat jerry.key)" wait_for_gentlemanjerry
   rm jerry.key jerry.crt
 }
@@ -123,9 +152,9 @@ teardown() {
   # Force an unclean shutdown to avoid GentlemanJerry exiting with 0
   pkill -KILL -f 'java.*logstash'
   timeout 10 grep -q "GentlemanJerry died, restarting..." <(tail -f /tmp/logs/jerry.logs)
-  pkill -f 'tail'
+  pkill -f 'tail' || true
   run timeout 120 grep -q "Logstash startup completed" <(tail -f /tmp/logs/jerry.logs)
-  pkill -f 'tail'
+  pkill -f 'tail' || true
   pkill -f run-gentleman-jerry
   pkill -f 'java.*logstash'
   [ "$status" -eq 0 ]  # Command should have finished before timeout. We'd get 143 if it timed out.
@@ -148,4 +177,14 @@ teardown() {
   [[ "$output" =~ "Verify return code: 0 (ok)" ]]
   run timeout 10 java -cp /tmp/test SslTest api.logentries.com 25414
   [ "$status" -eq 0 ]
+}
+
+@test "Gentleman Jerry can connect to a TLSv1.2-only Endpoint" {
+  wait_for_tls12_server
+  timeout 5 openssl s_client -CAfile /tmp/certs/jerry.crt -connect localhost:4433 | grep "Verify return code: 0 (ok)"
+
+  # Import cert into test truststore
+  keytool -importcert -file /tmp/certs/jerry.crt -keystore /tmp/certs/jerry.jks -storepass testpass -noprompt
+
+  timeout 10 java -Djavax.net.ssl.trustStore=/tmp/certs/jerry.jks -cp /tmp/test SslTest localhost 4433
 }
