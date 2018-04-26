@@ -55,7 +55,7 @@ from the `master` branch.
 Finally, start a container running that image that mounts in the certificate and key and runs on a
 port of your choice, say, 1234:
 
-````
+```
 $ docker run -i -t -p 1234:5000 -v /tmp/jerry-cert:/tmp/certs quay.io/aptible/gentlemanjerry:latest
 ```
 
