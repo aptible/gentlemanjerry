@@ -40,13 +40,13 @@ RUN apk add --no-cache git && \
     mv "${GEMFILE}.tmp" "$GEMFILE" && \
     grep -v 'logstash-output-redis' "$GEMFILE" > "${GEMFILE}.tmp" && \
     mv "${GEMFILE}.tmp" "$GEMFILE" && \
-    echo "gem 'logstash-output-http', :git => 'https://github.com/krallin/logstash-output-http'," \
+    echo "gem 'logstash-output-http', :git => 'https://github.com/aptible/logstash-output-http'," \
          ":ref => '81af883'" >> "$GEMFILE" && \
-    echo "gem 'logstash-mixin-http_client', :git => 'https://github.com/krallin/logstash-mixin-http_client'," \
+    echo "gem 'logstash-mixin-http_client', :git => 'https://github.com/aptible/logstash-mixin-http_client'," \
          ":ref => '68fa376'" >> "$GEMFILE" && \
-    echo "gem 'logstash-output-syslog', :git => 'https://github.com/krallin/logstash-output-syslog'," \
+    echo "gem 'logstash-output-syslog', :git => 'https://github.com/aptible/logstash-output-syslog'," \
          ":branch => 'ffdbd4b'" >> "$GEMFILE" && \
-    echo "gem 'logstash-output-redis', :git => 'https://github.com/krallin/logstash-output-redis'," \
+    echo "gem 'logstash-output-redis', :git => 'https://github.com/aptible/logstash-output-redis'," \
          ":ref => '3fa4b3e'" >> "$GEMFILE" && \
     "/logstash-${LOGSTASH_VERSION}/bin/plugin" install --no-verify && \
     apk del git
