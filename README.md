@@ -118,6 +118,4 @@ All tests are implemented in bats. Run them with:
 
 ## Copyright
 
-Copyright (c) 2014 [Aptible](https://www.aptible.com). All rights reserved.
-
-[<img src="https://s.gravatar.com/avatar/c386daf18778552e0d2f2442fd82144d?s=60" style="border-radius: 50%;" alt="@aaw" />](https://github.com/aaw)
+Copyright (c) 2019 [Aptible](https://www.aptible.com). All rights reserved.
