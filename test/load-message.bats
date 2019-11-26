@@ -68,7 +68,7 @@ setup() {
   mkdir -p "$TEST_WORK_DIR"
 
   export TEST_CONFIG="${TEST_WORK_DIR}/redis.conf"
-  REDIS_ALLOWED_MEMORY='2mb' erb /redis.conf.erb > "$TEST_CONFIG"
+  REDIS_MAX_MEMORY='2mb' erb /redis.conf.erb > "$TEST_CONFIG"
   redis-server "$TEST_CONFIG" &
   export REDIS_SERVER_PID=$!
 
@@ -171,7 +171,7 @@ teardown() {
   [[ ${lines[3]} =~ "Bucket 2 message 2" ]]
 }
 
-@test "It does not error upon receving a junk message" {
+@test "It does not error upon receiving a junk message" {
   subscribe_to_stream "app"
 
   run redis-cli EVALSHA "$LOAD_SCRIPT_SHA" 0 "{}"

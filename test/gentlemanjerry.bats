@@ -5,12 +5,15 @@ generate_certs() {
 }
 
 wait_for_gentlemanjerry() {
+  export REDIS_PASSWORD="foobar123"
+
   # Unfortunately, it takes a while for logstash to start up. The tests below
   # run the gentlemanjerry startup script in the background, then tail its
   # output until we see a single line of output or 120 seconds have elapsed.
   # When either condition is met, we kill the logstash process and test the
   # output against what we expect.
   jerry_log_file="/tmp/logs/jerry.logs"
+  rm -f "$jerry_log_file"
 
   /bin/bash run-gentleman-jerry.sh 2>&1 > "$jerry_log_file" &
 
@@ -22,7 +25,6 @@ wait_for_gentlemanjerry() {
   done
 
   echo "Gentlemanjerry did not start in time, or failed to start:"
-  cat "$jerry_log_file"
   return 1
 }
 
@@ -128,7 +130,8 @@ teardown() {
   [[ "$output" =~ "Verify return code: 0 (ok)" ]]
 
   # Now, send some traffic into Logstash
-  "/logstash-${LOGSTASH_VERSION}/bin/logstash" -f "${BATS_TEST_DIRNAME}/feed-logstash.config"
+  redis-cli -a ${REDIS_PASSWORD} -n 1 LPUSH filebeat '{"@timestamp":"2019-11-20T04:28:20.528Z","source":"database","host":"foo","offset":0,"file":"/tmp/dockerlogs/foo/foo-json.log"}},"message":"{"log":"line 1","stream":"stdout","time":"2019-11-20T04:27:53.337014097Z"}}'
+  redis-cli -a ${REDIS_PASSWORD} -n 1 LPUSH filebeat '{"@timestamp":"2019-11-20T04:28:22.528Z","source":"aptible","host":"bar","offset":8,"file":"/tmp/activitylogs/bar-json.log"}},"message":"{"log":"line 2","stream":"stdout","time":"2019-11-20T04:27:53.337014097Z"}}'
 
   # And check if Redis received the message
   found_buffer_map=0
