@@ -7,14 +7,6 @@ services:
 env:
   global:
     - DOCKER_CONFIG=./.docker
-  matrix:
-    - TAG=small
-    - TAG=medium
-    - TAG=large
-    - TAG=xlarge
-    - TAG=2xlarge
-    - TAG=4xlarge
-    - TAG=8xlarge
 
 script:
   - make build

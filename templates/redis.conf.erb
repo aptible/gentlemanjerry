@@ -17,14 +17,14 @@ appendonly no
 # Enforce authentication using the drain password.
 requirepass <%= ENV['REDIS_PASSWORD'] %>
 
-# Allow up to 8 MB of log buffer storage by default.
-maxmemory <%= ENV['REDIS_ALLOWED_MEMORY'] || '8mb' %>
+maxmemory <%= ENV['REDIS_MAX_MEMORY'] || '104857600' %>
 
 # If we hit the memory limit, then kill the oldest key.
 maxmemory-policy volatile-ttl
 
-# We only need and will ever use one database
-databases 1
+# db 0 is for log tails
+# db 1 is for joecool
+databases 2
 
 # Disable the CONFIG command: we don't want users (accidentally or
 # deliberately) abusing a tail drain as a redis server.

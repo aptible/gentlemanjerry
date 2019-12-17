@@ -1,10 +1,9 @@
 input {
-  lumberjack {
-    codec => json
-    port => 5000
-    type => "json"
-    ssl_certificate => "/tmp/certs/jerry.crt"
-    ssl_key => "/tmp/certs/jerry.key"
+  redis {
+    password => "<%= ENV['REDIS_PASSWORD'] %>"
+    key => "filebeat"
+    db => 1
+    data_type => "list"
   }
 }
 filter {
@@ -12,18 +11,24 @@ filter {
   date {
     match => [ "time", "ISO8601", "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'Z'" ]
   }
-  # Extract the container id from the file that we're following.
-  grok {
-    match => [ "file", "/tmp/dockerlogs/%{BASE16NUM:container}" ]
-    match => [ "file", "/tmp/activitylogs/%{BASE16NUM:container}-json.log" ]
-  }
-  # The next two filters overwrite the host field with the first 12
-  # characters of the Docker container id.
   grok {
     match => ["container", "(?<container_short>.{12})"]
   }
+  # This has to come before any actions on the "message" field, otherwise
+  # the log field containing offset and file path will be overwritten
+  # by the actual log message.
   mutate {
-    rename => [ "container_short", "host" ]
+    rename => {
+      "[log][offset]" => "offset"
+      "[log][file][path]" => "file"
+      "container_short" => "host"
+    }
+  }
+  json {
+    source => "message"
+  }
+  mutate {
+    remove_field => ['agent', 'ecs', 'input', 'message']
   }
   <%= ENV['LOGSTASH_FILTERS'] || "" %>
 }

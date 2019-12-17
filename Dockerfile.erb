@@ -1,4 +1,4 @@
-FROM alpine:3.7
+FROM alpine:3.8
 
 ENV JDK_VERSION openjdk7
 RUN apk update && apk add --no-cache bash curl "${JDK_VERSION}-jre-base" ruby java-cacerts
@@ -23,7 +23,7 @@ RUN curl -O "https://download.elastic.co/logstash/logstash/logstash-${LOGSTASH_V
     tar zxf "logstash-${LOGSTASH_VERSION}.tar.gz" && \
     rm "logstash-${LOGSTASH_VERSION}.tar.gz"
 
-# The Redis output is used with a local Redis, so we need to isntall it. We
+# The Redis output is used with a local Redis, so we need to install it. We
 # also pull coreutils, largely for convenience in our tests.
 RUN apk add --no-cache coreutils redis
 
@@ -31,6 +31,13 @@ RUN apk add --no-cache coreutils redis
 # often breaks, so we install from source.
 ADD bin/install-stunnel.sh install-stunnel.sh
 RUN ./install-stunnel.sh
+
+# Use another version of jruby to upgrade jruby-openssl,
+# since the Logstash-packaged version of jruby-openssl can't connect
+# rubygems.org
+RUN apk add jruby && \
+    GEM_HOME=/logstash-1.5.1/vendor/bundle/jruby/1.9 jruby -S  gem install jruby-openssl -v '0.9.20' && \
+    apk del jruby
 
 # Update http output gem
 # Install our syslog output implementation
@@ -85,9 +92,6 @@ RUN curl -sL https://github.com/sstephenson/bats/archive/master.zip > /tmp/bats.
 # Run tests
 ADD test /tmp/test
 RUN /tmp/test/run_tests.sh
-
-# Inject the environment corresponding to this container size
-ENV LOGSTASH_MAX_HEAP_SIZE <%= ENV.fetch 'LOGSTASH_MAX_HEAP_SIZE' %>
 
 # A volume containing a certificate pair named jerry.key/jerry.crt must be mounted into
 # this directory on the container.
