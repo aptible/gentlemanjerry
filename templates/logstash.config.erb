@@ -14,21 +14,18 @@ filter {
   grok {
     match => ["container", "(?<container_short>.{12})"]
   }
-  # This has to come before any actions on the "message" field, otherwise
-  # the log field containing offset and file path will be overwritten
-  # by the actual log message.
   mutate {
     rename => {
       "[log][offset]" => "offset"
       "[log][file][path]" => "file"
+      "[json][log]" => "log"
+      "[json][stream]" => "stream"
+      "[json][time]" => "time"
       "container_short" => "host"
     }
   }
-  json {
-    source => "message"
-  }
   mutate {
-    remove_field => ['agent', 'ecs', 'input', 'message']
+    remove_field => ['agent', 'ecs', 'input', 'message', 'json']
   }
   <%= ENV['LOGSTASH_FILTERS'] || "" %>
 }
