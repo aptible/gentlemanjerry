@@ -18,7 +18,7 @@ wait_for_gentlemanjerry() {
   /bin/bash run-gentleman-jerry.sh 2>&1 > "$jerry_log_file" &
 
   for i in $(seq 1 120); do
-    if grep -q "Logstash startup completed" "$jerry_log_file"; then
+    if grep -q "Pipelines running" "$jerry_log_file"; then
       return 0
     fi
     sleep 1
@@ -156,7 +156,7 @@ teardown() {
   pkill -KILL -f 'java.*logstash'
   timeout 10 grep -q "GentlemanJerry died, restarting..." <(tail -f /tmp/logs/jerry.logs)
   pkill -f 'tail' || true
-  run timeout 120 grep -q "Logstash startup completed" <(tail -f /tmp/logs/jerry.logs)
+  run timeout 120 grep -q "Pipelines running" <(tail -f /tmp/logs/jerry.logs)
   pkill -f 'tail' || true
   pkill -f run-gentleman-jerry
   pkill -f 'java.*logstash'
