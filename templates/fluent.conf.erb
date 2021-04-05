@@ -1,0 +1,109 @@
+<source>
+  @type beats
+  metadata_as_tag
+  port 5000
+</source>
+
+<label @FLUENT_LOG>
+  <match fluent.*>
+    @type stdout
+  </match>
+</label>
+
+<% if ENV['LOGSTASH_OUTPUT_CONFIG'] =~ /^elasticsearch {$/ %>
+<match **>
+  @type elasticsearch
+  user <%= ENV['LOGSTASH_OUTPUT_CONFIG'][/user => "([^"]+)"/, 1] %>
+  password <%= ENV['LOGSTASH_OUTPUT_CONFIG'][/password => "([^"]+)"/, 1] %>
+  host <%= ENV['LOGSTASH_OUTPUT_CONFIG'][/host => "([^"]+)"/, 1] %>
+  port <%= ENV['LOGSTASH_OUTPUT_CONFIG'][/port => (\d+)/, 1] %>
+  scheme https
+  logstash_format true
+</match>
+<%end%>
+
+<% if ENV['LOGSTASH_OUTPUT_CONFIG'] =~ /^http {$/ %>
+  <% require 'uri' %>
+  <% target = URI.parse(ENV['LOGSTASH_OUTPUT_CONFIG'][/url => "([^"]+)"/, 1]) %>
+
+  <% if target.host == 'logs.logdna.com' %>
+    <% options = target.query ? URI.decode_www_form(target.query).to_h : {} %>
+<match **>
+  @type logdna
+  api_key <%= target.path.split('/').last %>
+  <%# This field is required %>
+  hostname <%= options['hostname'] || 'aptible' %>
+  <% if options['app'] %>app <%= options['app'] %><%end%>
+  <% if options['tags'] %>tags <%= options['tags'] %><%end%>
+</match>
+  <% elsif target.host =~ /datadoghq.com/ %>
+<match **>
+  @type datadog
+  api_key <%= target.path.split('/').last %>
+  dd_hostname aptible
+</match>
+  <% elsif target.host =~ /sumologic/ %>
+<match **>
+  @type sumologic
+  endpoint <%= target.to_s %>
+</match>
+  <% else %>
+<match **>
+  @type http
+
+  endpoint <%= target.to_s %>
+  open_timeout 2
+
+  <format>
+    @type json
+  </format>
+  <buffer>
+    flush_interval 5s
+  </buffer>
+</match>
+  <%end%>
+<%end%>
+
+<% if ENV['LOGSTASH_OUTPUT_CONFIG'] =~ /^syslog {$/ %>
+  <% target = { host: ENV['LOGSTASH_OUTPUT_CONFIG'][/host => "([^"]+)"/, 1] } %>
+  <% target[:port] = ENV['LOGSTASH_OUTPUT_CONFIG'][/port => (\d+)/, 1] %>
+
+<filter **>
+  type record_transformer
+  enable_ruby true
+  <record>
+    hostname ${record['host']['name']}
+    program ${record['service']}
+    severity info
+    facility user
+    message ${record['json']['log']}
+  </record>
+</filter>
+
+
+
+  <% if target[:host] =~ /papertrail/ %>
+<match **>
+  type papertrail
+  papertrail_host <%= target[:host] %>
+  papertrail_port <%= target[:port] %>
+</match>
+  <% else %>
+<match **>
+  @type syslog_rfc5424
+
+  host <%= target[:host] %>
+  port <%= target[:port] %>
+
+  <format>
+    @type syslog_rfc5424
+    app_name_field service
+    log_field message
+  </format>
+
+  <buffer>
+    flush_interval 5s
+  </buffer>
+</match>
+  <%end%>
+<%end%>

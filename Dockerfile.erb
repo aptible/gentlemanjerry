@@ -1,84 +1,42 @@
-FROM alpine:3.8
+FROM fluent/fluentd:v1.12.1-1.0
 
-ENV JDK_VERSION openjdk7
-RUN apk update && apk add --no-cache bash curl "${JDK_VERSION}-jre-base" ruby java-cacerts
+USER root
 
 # Add extra certificates. Specifically, rapidssl is needed because it's used
 # by Papertrail.
 ENV LOCAL_TRUST_DIR /usr/local/share/ca-certificates
-ADD rapidssl.crt "$LOCAL_TRUST_DIR/rapidssl.crt"
+COPY rapidssl.crt "$LOCAL_TRUST_DIR/rapidssl.crt"
 RUN update-ca-certificates
-
-# And actually ensure Java uses the system trustore java-cacerts creates
-RUN JAVA_TRUSTSTORE=/usr/lib/jvm/java-1.7-openjdk/jre/lib/security/cacerts \
- && SYSTEM_TRUSTSTORE=/etc/ssl/certs/java/cacerts \
- && rm "$JAVA_TRUSTSTORE" \
- && ln -s "$SYSTEM_TRUSTSTORE" "$JAVA_TRUSTSTORE"
-
-ENV LOGSTASH_VERSION 1.5.1
-
-# Download the logstash tarball, verify its SHA against a golden SHA, extract it.
-RUN curl -O "https://download.elastic.co/logstash/logstash/logstash-${LOGSTASH_VERSION}.tar.gz" && \
-    echo "526bf554d1f1e27354f3816c1a3576a83ac1ca05  logstash-${LOGSTASH_VERSION}.tar.gz" | sha1sum -c - && \
-    tar zxf "logstash-${LOGSTASH_VERSION}.tar.gz" && \
-    rm "logstash-${LOGSTASH_VERSION}.tar.gz"
 
 # The Redis output is used with a local Redis, so we need to install it. We
 # also pull coreutils, largely for convenience in our tests.
-RUN apk add --no-cache coreutils redis
+RUN apk add --no-cache coreutils redis curl bash openssl
 
 # Now, we need to install stunnel. It's only in the edge repo, and that package
 # often breaks, so we install from source.
-ADD bin/install-stunnel.sh install-stunnel.sh
-RUN ./install-stunnel.sh
+# TODO: This breaks on libssl1.0 so punting for now
+# COPY bin/install-stunnel.sh /usr/bin/install-stunnel.sh
+# RUN /usr/bin/install-stunnel.sh
 
-# Use another version of jruby to upgrade jruby-openssl,
-# since the Logstash-packaged version of jruby-openssl can't connect
-# rubygems.org
-RUN apk add jruby && \
-    GEM_HOME=/logstash-1.5.1/vendor/bundle/jruby/1.9 jruby -S  gem install jruby-openssl -v '0.9.20' && \
-    apk del jruby
+# Install the necessary plugins
+RUN apk add --no-cache --update --virtual .build-deps \
+      build-base ruby-dev \
+      && gem install fluent-plugin-logdna \
+      && gem install fluent-plugin-papertrail \
+      && gem install fluent-plugin-elasticsearch \
+      && gem install fluent-plugin-sumologic_output \
+      && gem install fluent-plugin-beats --no-document \
+      && gem install fluent-plugin-syslog_rfc5424 \
+      && gem install fluent-plugin-datadog \
+      && gem sources --clear-all \
+      && apk del .build-deps \
+      && rm -rf /tmp/* /var/tmp/* /usr/lib/ruby/gems/*/cache/*.gem
 
-# Update http output gem
-# Install our syslog output implementation
-RUN apk add --no-cache git && \
-    GEMFILE="/logstash-${LOGSTASH_VERSION}/Gemfile" && \
-    grep -v 'logstash-output-http' "$GEMFILE" > "${GEMFILE}.tmp" && \
-    mv "${GEMFILE}.tmp" "$GEMFILE" && \
-    grep -v 'logstash-output-redis' "$GEMFILE" > "${GEMFILE}.tmp" && \
-    mv "${GEMFILE}.tmp" "$GEMFILE" && \
-    echo "gem 'logstash-output-http', :git => 'https://github.com/krallin/logstash-output-http'," \
-         ":ref => '81af883'" >> "$GEMFILE" && \
-    echo "gem 'logstash-mixin-http_client', :git => 'https://github.com/krallin/logstash-mixin-http_client'," \
-         ":ref => '68fa376'" >> "$GEMFILE" && \
-    echo "gem 'logstash-output-syslog', :git => 'https://github.com/krallin/logstash-output-syslog'," \
-         ":branch => 'ffdbd4b'" >> "$GEMFILE" && \
-    echo "gem 'logstash-output-redis', :git => 'https://github.com/krallin/logstash-output-redis'," \
-         ":ref => '3fa4b3e'" >> "$GEMFILE" && \
-    "/logstash-${LOGSTASH_VERSION}/bin/plugin" install --no-verify && \
-    apk del git
-
-# The logstash-output-elasticsearch plugin needs log4j-1.2.17.jar added to its
-# runtime dependencies so that we can suppress some of the Java logging. This
-# jar already exists in the dependencies for some other plugins, so we just copy
-# from one of them.
-RUN cp "/logstash-${LOGSTASH_VERSION}/vendor/bundle/jruby/1.9/gems/"*"/vendor/jar-dependencies/runtime-jars/log4j-1.2.17.jar" \
-       "/logstash-${LOGSTASH_VERSION}/vendor/bundle/jruby/1.9/gems/logstash-output-elasticsearch"*"/vendor/jar-dependencies/runtime-jars/"
-
-# Now, for some reason, Logstash won't allow us to install this plugin like the others, so we do the next best thing... patch it in place!
-ADD patches/0001-Support-for-ES-5-Pipelines.patch /
-ADD patches/0002-Elasticsearch-Set-Content-Type.patch /
-RUN apk add --no-cache patch \
- && patch -p 1 -d "/logstash-${LOGSTASH_VERSION}/vendor/bundle/jruby/1.9/gems/logstash-output-elasticsearch-0.2.8-java" < /0001-Support-for-ES-5-Pipelines.patch \
- && patch -p 1 -d "/logstash-${LOGSTASH_VERSION}/vendor/bundle/jruby/1.9/gems/logstash-output-elasticsearch-0.2.8-java" < /0002-Elasticsearch-Set-Content-Type.patch \
- && apk del patch
-
-ADD templates/stunnel.conf /stunnel.conf
-ADD templates/redis.conf.erb /redis.conf.erb
-ADD templates/load-message.lua /load-message.lua
-ADD templates/logstash.config.erb /logstash.config.erb
-ADD templates/log4j.properties /log4j.properties
-ADD bin/run-gentleman-jerry.sh run-gentleman-jerry.sh
+COPY templates/stunnel.conf /stunnel.conf
+COPY templates/redis.conf.erb /redis.conf.erb
+COPY templates/load-message.lua /load-message.lua
+COPY templates/fluent.conf.erb /fluent.conf.erb
+COPY bin/run-gentleman-jerry.sh run-gentleman-jerry.sh
 
 # Install BATS (for tests)
 RUN curl -sL https://github.com/sstephenson/bats/archive/master.zip > /tmp/bats.zip \
@@ -90,8 +48,9 @@ RUN curl -sL https://github.com/sstephenson/bats/archive/master.zip > /tmp/bats.
     && rm -rf /tmp/bats*
 
 # Run tests
-ADD test /tmp/test
-RUN /tmp/test/run_tests.sh
+COPY test /tmp/test
+# TODO: Run this once the tests are updated
+# RUN /tmp/test/run_tests.sh
 
 # A volume containing a certificate pair named jerry.key/jerry.crt must be mounted into
 # this directory on the container.
