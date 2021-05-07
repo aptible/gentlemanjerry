@@ -27,25 +27,6 @@ elif [[ ! -f "$SSL_KEY_FILE" ]]; then
   exit 1
 fi
 
-if [[ -n "$REDIS_PASSWORD" ]]; then
-  echo "Generating Redis configuration"
-  erb redis.conf.erb >/redis.conf
-
-  echo "Starting stunnel (SSL reverse proxy)"
-  stunnel /stunnel.conf &
-
-  echo "Starting Redis"
-  redis-server /redis.conf &
-
-  # Now, load the script
-  echo "Loading script"
-  until LOAD_SCRIPT_SHA="$(redis-cli -a "$REDIS_PASSWORD" SCRIPT LOAD "$(cat "/load-message.lua")")"; do
-    echo "Redis is not up yet... Retrying in 1s"
-    sleep 1
-  done
-  export LOAD_SCRIPT_SHA
-fi
-
 echo "Generating Fluentd configuration"
 erb fluent.conf.erb >/fluentd/etc/fluent.conf
 

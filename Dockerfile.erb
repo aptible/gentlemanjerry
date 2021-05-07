@@ -10,13 +10,7 @@ RUN update-ca-certificates
 
 # The Redis output is used with a local Redis, so we need to install it. We
 # also pull coreutils, largely for convenience in our tests.
-RUN apk add --no-cache coreutils redis curl bash openssl
-
-# Now, we need to install stunnel. It's only in the edge repo, and that package
-# often breaks, so we install from source.
-# TODO: This breaks on libssl1.0 so punting for now
-# COPY bin/install-stunnel.sh /usr/bin/install-stunnel.sh
-# RUN /usr/bin/install-stunnel.sh
+RUN apk add --no-cache coreutils curl bash openssl
 
 # Install the necessary plugins
 RUN apk add --no-cache --update --virtual .build-deps \
@@ -32,9 +26,6 @@ RUN apk add --no-cache --update --virtual .build-deps \
       && apk del .build-deps \
       && rm -rf /tmp/* /var/tmp/* /usr/lib/ruby/gems/*/cache/*.gem
 
-COPY templates/stunnel.conf /stunnel.conf
-COPY templates/redis.conf.erb /redis.conf.erb
-COPY templates/load-message.lua /load-message.lua
 COPY templates/fluent.conf.erb /fluent.conf.erb
 COPY bin/run-gentleman-jerry.sh run-gentleman-jerry.sh
 
