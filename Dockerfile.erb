@@ -22,6 +22,7 @@ RUN apk add --no-cache --update --virtual .build-deps \
       && gem install fluent-plugin-beats --no-document \
       && gem install fluent-plugin-syslog_rfc5424 \
       && gem install fluent-plugin-datadog \
+      && gem install fluent-plugin-influxdb \
       && gem sources --clear-all \
       && apk del .build-deps \
       && rm -rf /tmp/* /var/tmp/* /usr/lib/ruby/gems/*/cache/*.gem
@@ -49,7 +50,5 @@ VOLUME ["/tmp/certs"]
 
 # Lumberjack
 EXPOSE 5000
-# Redis (used if the drain is a tail)
-EXPOSE 6000
 
 CMD ["/bin/bash", "run-gentleman-jerry.sh"]

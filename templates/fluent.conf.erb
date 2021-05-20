@@ -1,8 +1,30 @@
 <source>
   @type monitor_agent
-  bind 0.0.0.0
-  port 24220
+  @label @FLUENT_METRICS
+  tag internal_fluentd_metrics
+  include_config false
 </source>
+
+<label @FLUENT_METRICS>
+  <filter internal_fluentd_metrics.**>
+    @type grep
+    <regexp>
+      key plugin_category
+      pattern "output"
+    </regexp>
+
+    <exclude>
+      key type
+      pattern "stdout"
+    </exclude>
+  </filter>
+
+  <%= ENV['FLUENTD_MONITOR_FILTERS'] || "" %>
+
+  <match internal_fluentd_metrics.**>
+    <%= ENV['FLUENTD_MONITOR_CONFIG'] || "" %>
+  </match>
+</label>
 
 <source>
   @type beats
