@@ -41,8 +41,7 @@ RUN curl -sL https://github.com/sstephenson/bats/archive/master.zip > /tmp/bats.
 
 # Run tests
 COPY test /tmp/test
-# TODO: Run this once the tests are updated
-# RUN /tmp/test/run_tests.sh
+RUN /tmp/test/run_tests.sh
 
 # A volume containing a certificate pair named jerry.key/jerry.crt must be mounted into
 # this directory on the container.
