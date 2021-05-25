@@ -14,8 +14,12 @@ RUN apk add --no-cache coreutils curl bash openssl
 
 # Install the necessary plugins
 RUN apk add --no-cache --update --virtual .build-deps \
-      build-base ruby-dev \
-      && gem install fluent-plugin-logdna \
+      build-base ruby-dev git \
+      && git clone -b aptible https://github.com/almathew/fluent-plugin-logdna.git \
+      && cd fluent-plugin-logdna \
+      && gem build fluent-plugin-logdna.gemspec \
+      && gem install fluent-plugin-logdna-0.4.0.gem \
+      && cd .. \
       && gem install fluent-plugin-papertrail \
       && gem install fluent-plugin-elasticsearch \
       && gem install fluent-plugin-sumologic_output \
