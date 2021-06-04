@@ -5,9 +5,6 @@ generate_certs() {
 }
 
 wait_for_gentlemanjerry() {
-  export REDIS_PASSWORD="foobar123"
-
-  # Unfortunately, it takes a while for logstash to start up. The tests below
   # run the gentlemanjerry startup script in the background, then tail its
   # output until we see a single line of output or 120 seconds have elapsed.
   # When either condition is met, we kill the logstash process and test the
@@ -17,14 +14,15 @@ wait_for_gentlemanjerry() {
 
   /bin/bash run-gentleman-jerry.sh 2>&1 > "$jerry_log_file" &
 
-  for i in $(seq 1 120); do
-    if grep -q "Logstash startup completed" "$jerry_log_file"; then
+  for i in $(seq 1 10); do
+    if grep -q "fluentd worker is now running" "$jerry_log_file"; then
       return 0
     fi
     sleep 1
   done
 
   echo "Gentlemanjerry did not start in time, or failed to start:"
+  echo "$(cat $jerry_log_file)"
   return 1
 }
 
@@ -57,6 +55,7 @@ wait_for_tls12_server() {
 }
 
 setup() {
+  export FLUENTD_MONITOR_CONFIG='@type stdout'
   mkdir /tmp/certs
   mkdir /tmp/logs
 }
@@ -65,9 +64,7 @@ teardown() {
   # Here again, we kill everything with SIGKILL, to ensure that nothing stays
   # up between tests / takes a little while to exit.
   pkill -KILL -f run-gentleman-jerry
-  pkill -KILL -f 'java.*logstash'
-  pkill -KILL redis-server || true
-  pkill -KILL stunnel || true
+  pkill -KILL -f 'fluentd'
   pkill -KILL openssl || true
 
   rm -rf /tmp/certs
@@ -88,106 +85,64 @@ teardown() {
   [[ "$output" =~ "/tmp/certs/jerry.key" ]]
 }
 
-@test "Gentleman Jerry should start up with a default configuration" {
+@test "Gentleman Jerry should not start up with a default configuration" {
   generate_certs
-  wait_for_gentlemanjerry
+  run timeout 10 /bin/bash run-gentleman-jerry.sh
+
+  [[ "$output" =~ "Missing '@type' parameter on <match> directive" ]]
 }
 
 @test "Gentleman Jerry should allow certificates in the environment" {
   openssl req -x509 -batch -nodes -newkey rsa:2048 -subj /CN=Example/ -keyout jerry.key -out jerry.crt
+  # First, generate a valid config
+  export FLUENTD_OUTPUT_CONFIG="@type http
+                                endpoint 127.0.0.1
+                                open_timeout 2
+                                <format>
+                                  @type json
+                                </format>
+                                <buffer>
+                                  flush_interval 5s
+                                </buffer>"
   SSL_CERTIFICATE="$(cat jerry.crt)" SSL_KEY="$(cat jerry.key)" wait_for_gentlemanjerry
   rm jerry.key jerry.crt
 }
 
 @test "Gentleman Jerry should start up with a syslog output configuration" {
   generate_certs
-  export LOGSTASH_OUTPUT_CONFIG="syslog { facility => \"daemon\" host => \"127.0.0.1\" port => 514 severity => \"emergency\" }"
+  export FLUENTD_OUTPUT_CONFIG="@type syslog_rfc5424
+                                host 127.0.0.1
+                                port 514
+                                <format>
+                                  @type syslog_rfc5424
+                                  app_name_field service
+                                  log_field message
+                                </format>
+                                <buffer>
+                                  flush_interval 5s
+                                </buffer>"
   wait_for_gentlemanjerry
-}
-
-@test "Gentleman Jerry should start up with a Redis pubsub configuration" {
-  export REDIS_PASSWORD="foobar123"
-
-  export LOGSTASH_OUTPUT_CONFIG="redis {
-    data_type => \"script\"
-    key => \"__LOAD_SCRIPT_SHA__\"
-    password => \"${REDIS_PASSWORD}\"
-  }"
-
-  export LOGSTASH_FILTERS="ruby {
-    code => 'event[\"unix_timestamp\"] = event[\"@timestamp\"].to_i'
-  }"
-
-  generate_certs
-  wait_for_gentlemanjerry
-
-  # Check that stunnel and Redis came online as well
-  pgrep stunnel
-  pgrep redis-server
-
-  # Check that we can connect over ssl
-  run timeout 3 openssl s_client -CAfile "/tmp/certs/jerry.crt" -connect localhost:6000
-  [[ "$output" =~ "Verify return code: 0 (ok)" ]]
-
-  # Now, send some traffic into Logstash
-  redis-cli -a ${REDIS_PASSWORD} -n 1 LPUSH filebeat '{"@timestamp":"2019-11-20T04:28:20.528Z","source":"database","host":"foo","offset":0,"file":"/tmp/dockerlogs/foo/foo-json.log"}},"message":"{"log":"line 1","stream":"stdout","time":"2019-11-20T04:27:53.337014097Z"}}'
-  redis-cli -a ${REDIS_PASSWORD} -n 1 LPUSH filebeat '{"@timestamp":"2019-11-20T04:28:22.528Z","source":"aptible","host":"bar","offset":8,"file":"/tmp/activitylogs/bar-json.log"}},"message":"{"log":"line 2","stream":"stdout","time":"2019-11-20T04:27:53.337014097Z"}}'
-
-  # And check if Redis received the message
-  found_buffer_map=0
-  for _ in $(seq 1 20); do
-    echo $(date) >> /search
-    echo "Looking for buffer map??"
-    redis-cli -a "$REDIS_PASSWORD" KEYS '*' > "/tmp/logs/keys"
-    if grep "buffer-map" "/tmp/logs/keys"; then
-      found_buffer_map=1
-      break
-    fi
-    sleep 1
-  done
-  [[ "$found_buffer_map" -eq 1 ]]
 }
 
 @test "Gentleman Jerry should restart if it dies" {
   generate_certs
-  export LOGSTASH_OUTPUT_CONFIG="syslog { facility => \"daemon\" host => \"127.0.0.1\" port => 514 severity => \"emergency\" }"
+  export FLUENTD_OUTPUT_CONFIG="@type http
+                                endpoint 127.0.0.1
+                                open_timeout 2
+                                <format>
+                                  @type json
+                                </format>
+                                <buffer>
+                                  flush_interval 5s
+                                </buffer>"
   wait_for_gentlemanjerry
   # Force an unclean shutdown to avoid GentlemanJerry exiting with 0
-  pkill -KILL -f 'java.*logstash'
+  pkill -KILL -f 'fluentd'
   timeout 10 grep -q "GentlemanJerry died, restarting..." <(tail -f /tmp/logs/jerry.logs)
   pkill -f 'tail' || true
-  run timeout 120 grep -q "Logstash startup completed" <(tail -f /tmp/logs/jerry.logs)
+  run timeout 10 grep -q "fluentd worker is now running" <(tail -f /tmp/logs/jerry.logs)
   pkill -f 'tail' || true
   pkill -f run-gentleman-jerry
-  pkill -f 'java.*logstash'
+  pkill -f 'fluentd'
   [ "$status" -eq 0 ]  # Command should have finished before timeout. We'd get 143 if it timed out.
-}
-
-# We send syslog over TLS to various log drains-as-a-service and need to be able to
-# verify their certificate chains with the system certificates we have in
-# /usr/lib/ssl/cert.pem. This file is passed to logstash in the SSL_CERT_FILE environment
-# variable, which Ruby reads. These next few tests verify that this cert file works.
-
-@test "Gentleman Jerry can verify logs.papertrailapp.com:514's certificate" {
-  run timeout 10 openssl s_client -CAfile /etc/ssl/certs/ca-certificates.crt -connect logs.papertrailapp.com:514
-  [[ "$output" =~ "Verify return code: 0 (ok)" ]]
-  run timeout 10 java -cp /tmp/test SslTest logs.papertrailapp.com 514
-  [ "$status" -eq 0 ]
-}
-
-@test "Gentleman Jerry can verify api.logentries.com:25414's certificate" {
-  run timeout 10 openssl s_client -CAfile /etc/ssl/certs/ca-certificates.crt -connect api.logentries.com:25414
-  [[ "$output" =~ "Verify return code: 0 (ok)" ]]
-  run timeout 10 java -cp /tmp/test SslTest api.logentries.com 25414
-  [ "$status" -eq 0 ]
-}
-
-@test "Gentleman Jerry can connect to a TLSv1.2-only Endpoint" {
-  wait_for_tls12_server
-  timeout 5 openssl s_client -CAfile /tmp/certs/jerry.crt -connect localhost:4433 | grep "Verify return code: 0 (ok)"
-
-  # Import cert into test truststore
-  keytool -importcert -file /tmp/certs/jerry.crt -keystore /tmp/certs/jerry.jks -storepass testpass -noprompt
-
-  timeout 10 java -Djavax.net.ssl.trustStore=/tmp/certs/jerry.jks -cp /tmp/test SslTest localhost 4433
 }

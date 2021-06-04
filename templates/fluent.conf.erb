@@ -1,0 +1,48 @@
+<source>
+  @type monitor_agent
+  @label @FLUENT_METRICS
+  tag internal_fluentd_metrics
+  include_config false
+</source>
+
+<label @FLUENT_METRICS>
+  <filter internal_fluentd_metrics.**>
+    @type grep
+    <regexp>
+      key plugin_category
+      pattern "output"
+    </regexp>
+
+    <exclude>
+      key type
+      pattern "stdout"
+    </exclude>
+  </filter>
+
+  <%= ENV['FLUENTD_MONITOR_FILTERS'] || "" %>
+
+  <match internal_fluentd_metrics.**>
+    <%= ENV['FLUENTD_MONITOR_CONFIG'] || "" %>
+  </match>
+</label>
+
+<source>
+  @type beats
+  metadata_as_tag
+  port 5000
+  use_ssl true
+  ssl_certificate /tmp/certs/jerry.crt
+  ssl_key /tmp/certs/jerry.key
+</source>
+
+<label @FLUENT_LOG>
+  <match fluent.*>
+    @type stdout
+  </match>
+</label>
+
+<%= ENV['FLUENTD_FILTERS'] || "" %>
+
+<match **>
+  <%= ENV['FLUENTD_OUTPUT_CONFIG'] || "" %>
+</match>
