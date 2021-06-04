@@ -96,14 +96,8 @@ teardown() {
   openssl req -x509 -batch -nodes -newkey rsa:2048 -subj /CN=Example/ -keyout jerry.key -out jerry.crt
   # First, generate a valid config
   export FLUENTD_OUTPUT_CONFIG="@type http
-                                endpoint 127.0.0.1
-                                open_timeout 2
-                                <format>
-                                  @type json
-                                </format>
-                                <buffer>
-                                  flush_interval 5s
-                                </buffer>"
+                                endpoint_url 127.0.0.1
+                                serializer json"
   SSL_CERTIFICATE="$(cat jerry.crt)" SSL_KEY="$(cat jerry.key)" wait_for_gentlemanjerry
   rm jerry.key jerry.crt
 }
@@ -127,14 +121,8 @@ teardown() {
 @test "Gentleman Jerry should restart if it dies" {
   generate_certs
   export FLUENTD_OUTPUT_CONFIG="@type http
-                                endpoint 127.0.0.1
-                                open_timeout 2
-                                <format>
-                                  @type json
-                                </format>
-                                <buffer>
-                                  flush_interval 5s
-                                </buffer>"
+                                endpoint_url 127.0.0.1
+                                serializer json"
   wait_for_gentlemanjerry
   # Force an unclean shutdown to avoid GentlemanJerry exiting with 0
   pkill -KILL -f 'fluentd'
