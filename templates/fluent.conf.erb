@@ -33,6 +33,7 @@
   use_ssl true
   ssl_certificate /tmp/certs/jerry.crt
   ssl_key /tmp/certs/jerry.key
+  @label @JCLOGS
 </source>
 
 <label @FLUENT_LOG>
@@ -41,8 +42,10 @@
   </match>
 </label>
 
-<%= ENV['FLUENTD_FILTERS'] || "" %>
+<label @JCLOGS>
+  <%= ENV['FLUENTD_FILTERS'] || "" %>
 
-<match **>
-  <%= ENV['FLUENTD_OUTPUT_CONFIG'] || "" %>
-</match>
+  <match filebeat retry>
+    <%= ENV['FLUENTD_OUTPUT_CONFIG'] || "" %>
+  </match>
+</label>
