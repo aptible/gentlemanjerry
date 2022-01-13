@@ -31,7 +31,11 @@ RUN apk add --no-cache --update --virtual .build-deps \
       && gem install fluent-plugin-beats --no-document \
       && gem install fluent-plugin-syslog_rfc5424 \
       && gem install fluent-plugin-datadog \
-      && gem install fluent-plugin-influxdb \
+      && git clone -b auth-options https://github.com/aptible/fluent-plugin-influxdb.git \
+      && cd fluent-plugin-influxdb \
+      && gem build fluent-plugin-influxdb.gemspec \
+      && gem install fluent-plugin-influxdb-2.0.0.gem \
+      && cd .. \
       && gem sources --clear-all \
       && apk del .build-deps \
       && rm -rf /tmp/* /var/tmp/* /usr/lib/ruby/gems/*/cache/*.gem
