@@ -1,0 +1,7 @@
+HTTP/1.1 200 OK
+Content-Type: application/json
+X-Influxdb-Build: OSS
+X-Influxdb-Version: 1.8.2
+Content-Length: 121
+
+{"results":[{"statement_id":0,"series":[{"name":"databases","columns":["name"],"values":[["fluentd"],["_internal"]]}]}]}

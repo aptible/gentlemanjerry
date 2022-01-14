@@ -1,0 +1,21 @@
+HTTP/1.1 200 OK
+Content-Type: application/json; charset=UTF-8
+Content-Length: 561
+
+{
+  "name" : "elasticsearch",
+  "cluster_name" : "db-chaos-us-east-1-67964.aptible.in",
+  "cluster_uuid" : "dc1tuQkXSMqdrYKwdbrqWw",
+  "version" : {
+    "number" : "7.10.1",
+    "build_flavor" : "default",
+    "build_type" : "tar",
+    "build_hash" : "1c34507e66d7db1211f66f3513706fdf548736aa",
+    "build_date" : "2020-12-05T01:00:33.671820Z",
+    "build_snapshot" : false,
+    "lucene_version" : "8.7.0",
+    "minimum_wire_compatibility_version" : "6.8.0",
+    "minimum_index_compatibility_version" : "6.0.0-beta1"
+  },
+  "tagline" : "You Know, for Search"
+}
