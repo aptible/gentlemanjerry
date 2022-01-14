@@ -66,9 +66,14 @@ teardown() {
   pkill -KILL -f run-gentleman-jerry
   pkill -KILL -f 'fluentd'
   pkill -KILL openssl || true
+  pkill -f 'server.rb' || true
 
   rm -rf /tmp/certs
   rm -rf /tmp/logs
+}
+
+simulate_respose() {
+  BATS_TEST_DIRNAME="$BATS_TEST_DIRNAME" "$BATS_TEST_DIRNAME"/server.rb &
 }
 
 @test "Gentleman Jerry reports an error if its certificate isn't in /tmp/certs" {
@@ -133,4 +138,49 @@ teardown() {
   pkill -f run-gentleman-jerry
   pkill -f 'fluentd'
   [ "$status" -eq 0 ]  # Command should have finished before timeout. We'd get 143 if it timed out.
+}
+
+@test "It starts up with a Elasticsearch plugin (compatible with 7.10)" {
+  generate_certs
+  export FLUENTD_OUTPUT_CONFIG='@type elasticsearch'
+
+  UPSTREAM_PORT=9200 UPSTREAM_RESPONSE=es-7.10.txt simulate_respose
+
+  wait_for_gentlemanjerry
+}
+
+@test "It starts up with a Elasticsearch plugin (compatible with 6.8)" {
+  generate_certs
+  export FLUENTD_OUTPUT_CONFIG='@type elasticsearch'
+
+  UPSTREAM_PORT=9200 UPSTREAM_RESPONSE=es-6.8.txt simulate_respose
+
+  wait_for_gentlemanjerry
+}
+
+@test "It starts up with a Elasticsearch plugin (compatible with 6.0)" {
+  generate_certs
+  export FLUENTD_OUTPUT_CONFIG='@type elasticsearch'
+
+  UPSTREAM_PORT=9200 UPSTREAM_RESPONSE=es-6.0.txt simulate_respose
+
+  wait_for_gentlemanjerry
+}
+
+@test "It starts up with a Elasticsearch plugin (compatible with 5.0)" {
+  generate_certs
+  export FLUENTD_OUTPUT_CONFIG='@type elasticsearch'
+
+  UPSTREAM_PORT=9200 UPSTREAM_RESPONSE=es-5.0.txt simulate_respose
+
+  wait_for_gentlemanjerry
+}
+
+@test "It starts up with a Elasticsearch plugin (compatible with 2.2)" {
+  generate_certs
+  export FLUENTD_OUTPUT_CONFIG='@type elasticsearch'
+
+  UPSTREAM_PORT=9200 UPSTREAM_RESPONSE=es-2.2.txt simulate_respose
+
+  wait_for_gentlemanjerry
 }
