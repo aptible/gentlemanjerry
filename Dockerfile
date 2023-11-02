@@ -25,13 +25,6 @@ RUN apk add --no-cache --update --virtual .build-deps \
       && gem build fluent-plugin-out-http.gemspec \
       && gem install fluent-plugin-out-http-1.3.3.gem \
       && cd .. \
-      && gem install fluent-plugin-papertrail \
-      && gem install elasticsearch -v 7.13.3 \
-      && gem install fluent-plugin-elasticsearch \
-      && gem install fluent-plugin-sumologic_output \
-      && gem install fluent-plugin-beats --no-document \
-      && gem install fluent-plugin-syslog_rfc5424 \
-      && gem install fluent-plugin-datadog \
       && git clone -b auth-options https://github.com/aptible/fluent-plugin-influxdb.git \
       && cd fluent-plugin-influxdb \
       && gem build fluent-plugin-influxdb.gemspec \
@@ -40,6 +33,14 @@ RUN apk add --no-cache --update --virtual .build-deps \
       && gem sources --clear-all \
       && apk del .build-deps \
       && rm -rf /tmp/* /var/tmp/* /usr/lib/ruby/gems/*/cache/*.gem
+
+RUN gem install fluent-plugin-papertrail
+RUN gem install fluent-plugin-sumologic_output
+RUN gem install fluent-plugin-beats --no-document
+RUN gem install fluent-plugin-syslog_rfc5424
+RUN gem install fluent-plugin-datadog
+RUN gem install elasticsearch -v 7.13.3
+RUN gem install fluent-plugin-elasticsearch -v 5.0.4
 
 COPY templates/fluent.conf.erb /fluent.conf.erb
 COPY bin/run-gentleman-jerry.sh run-gentleman-jerry.sh
