@@ -116,6 +116,16 @@ All tests are implemented in bats. Run them with:
 
     make build
 
+## Image building an release
+
+On PR: All pushes to PR branches will have a PR number tag built and pushed to our image repos
+
+On merge to Master: the "master" and "latest" tags will be built and pushed to our image repos
+
+On release creation: the versioned release tag will be build and pushed to our image repos
+
+To update drains, you must update the LogDrainBackend.gentlemanjerry_tag for the right object, and provision the drains.
+
 ## Copyright
 
 Copyright (c) 2019 [Aptible](https://www.aptible.com). All rights reserved.
