@@ -5,9 +5,6 @@ on:
   push:
     branches:
       - master
-  release:
-    types:
-      - created
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -41,7 +38,3 @@ jobs:
       - name: Push (Master merge)
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         run: TAG=master make push
-
-      - name: Push (Publish release)
-        if: github.event_name == 'release' && github.event.action == 'created'
-        run: TAG=${{ github.event.release.tag_name }} make push
